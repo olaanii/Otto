@@ -39,10 +39,14 @@ import {
   Copy,
   GitCommit,
   GitMerge,
+  Layers,
+  Monitor,
   Scissors,
   Search,
+  ShieldCheck,
   Smartphone,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 
 interface FeaturesViewProps {
@@ -75,6 +79,7 @@ interface FeaturesViewProps {
     timestamp: string;
   } | null;
   onTriggerHotkeyAction?: (actionId: HotkeyActionId) => void;
+  onOpenInstallModal?: (tab: 'desktop' | 'ide' | 'daemon') => void;
 }
 
 const FEATURE_NAV_PILLS = [
@@ -171,6 +176,7 @@ export const FeaturesView: React.FC<FeaturesViewProps> = ({
   onUpdateHotkeyBindings,
   lastTriggeredShortcut = null,
   onTriggerHotkeyAction,
+  onOpenInstallModal,
 }) => {
   const [activeShowcaseAgent, setActiveShowcaseAgent] =
     useState<IdeHostId>('antigravity');
@@ -254,6 +260,50 @@ export const FeaturesView: React.FC<FeaturesViewProps> = ({
               <span>{pill.label}</span>
             </button>
           ))}
+        </div>
+
+        {/* Prominent Sleek CTA Row for Features View */}
+        <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('ide') : scrollToSection('feat-07-yours')}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1D1D1F] hover:bg-black text-white text-xs sm:text-sm font-semibold shadow-xs hover:shadow-md transition-all cursor-pointer group"
+          >
+            <Layers className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <span>Install IDE Extension (.vsix for Cursor, VS Code, Windsurf, Kiro, Antigravity)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('desktop') : scrollToSection('feat-07-yours')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-zinc-50 border border-black/[0.1] text-zinc-900 text-xs sm:text-sm font-medium shadow-2xs transition-all cursor-pointer"
+          >
+            <Monitor className="w-4 h-4 text-zinc-600" />
+            <span>Download Desktop (Flutter Windows / Mac / Linux)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('daemon') : scrollToSection('feat-07-yours')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-100 hover:bg-zinc-200 border border-black/[0.08] text-zinc-800 text-xs sm:text-sm font-mono font-medium transition-all cursor-pointer"
+          >
+            <Terminal className="w-3.5 h-3.5 text-zinc-500" />
+            <span>Run Native Go Daemon (<code className="text-indigo-600 font-semibold">go run cmd/daemon/main.go</code>)</span>
+          </button>
+        </div>
+
+        <div className="pt-1 flex flex-wrap items-center justify-center gap-3 text-[11.5px] text-zinc-500 font-medium">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Native Go Daemon (&lt;4ms AST Slicing)
+          </span>
+          <span>·</span>
+          <span className="inline-flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+            Clerk RS256 Enterprise Security
+          </span>
+          <span>·</span>
+          <span>8 Verified AI Environments</span>
         </div>
       </section>
 

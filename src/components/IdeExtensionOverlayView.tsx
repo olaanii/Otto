@@ -18,9 +18,14 @@ import {
   ChevronRight,
   FolderGit2,
   GitBranch,
+  Layers,
   Maximize2,
+  Monitor,
   PanelLeft,
   Plus,
+  ShieldCheck,
+  Terminal,
+  Zap,
 } from 'lucide-react';
 
 interface IdeExtensionOverlayViewProps {
@@ -47,6 +52,7 @@ interface IdeExtensionOverlayViewProps {
     autoPushImmediately: boolean;
   }) => void;
   onNavigateToInstall: () => void;
+  onOpenInstallModal?: (tab: 'desktop' | 'ide' | 'daemon') => void;
 }
 
 const AGENT_META = AGENT_ICON_ASSETS;
@@ -364,6 +370,7 @@ export const IdeExtensionOverlayView: React.FC<IdeExtensionOverlayViewProps> = (
   onSimulateLiveAgentTick,
   onInjectNotesCapture,
   onNavigateToInstall,
+  onOpenInstallModal,
 }) => {
   const [heroAgent, setHeroAgent] = useState<IdeHostId>('antigravity');
   const [activeScenarioId, setActiveScenarioId] = useState<string>('feature');
@@ -501,26 +508,62 @@ export const IdeExtensionOverlayView: React.FC<IdeExtensionOverlayViewProps> = (
           <mark className="bg-[#FCE588] text-[#1D1D1F] px-2 py-0.5 rounded-md font-medium underline decoration-[#1D1D1F]/30 underline-offset-4">
             fully agentic →
           </mark>{' '}
-          overlay for atomic commits and stacked PRs. Your agent slices and pushes to GitHub while you keep prompting.
+          overlay for atomic commits and stacked PRs. Powered by a high-performance native Go daemon and Clerk enterprise security across 8 IDE environments.
         </p>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+        {/* Prominent Sleek Apple/Moonjar-Grade CTA Buttons */}
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('ide') : onNavigateToInstall()}
+            className="inline-flex items-center gap-2 px-5 sm:px-6 py-3 text-[13.5px] font-semibold text-white bg-[#1D1D1F] hover:bg-black rounded-full shadow-md hover:shadow-lg transition-all whitespace-nowrap shrink-0 cursor-pointer group"
+          >
+            <Layers className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <span>Install IDE Extension (.vsix for Cursor, VS Code, Windsurf, Kiro, Antigravity)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('desktop') : onNavigateToInstall()}
+            className="inline-flex items-center gap-2 px-5 py-3 text-[13.5px] font-medium text-zinc-900 bg-white hover:bg-zinc-50 border border-black/[0.1] rounded-full shadow-xs hover:border-black/[0.18] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Monitor className="w-4 h-4 text-zinc-600" />
+            <span>Download Desktop (Flutter Windows / Mac / Linux)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('daemon') : onNavigateToInstall()}
+            className="inline-flex items-center gap-2 px-4 sm:px-5 py-3 text-[13px] font-mono font-medium text-zinc-800 bg-zinc-100/90 hover:bg-zinc-200/90 border border-black/[0.08] rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Terminal className="w-3.5 h-3.5 text-zinc-500" />
+            <span>Run Native Go Daemon (<code className="text-indigo-600 font-semibold">go run cmd/daemon/main.go</code>)</span>
+          </button>
+        </div>
+
+        {/* Secondary Action Row: Simulate Live Edit + Security Specs */}
+        <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1 text-xs text-zinc-500">
           <button
             type="button"
             onClick={() => onSimulateLiveAgentTick(activeAgentForHero)}
-            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-[#232325] hover:bg-[#141416] rounded-full shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 font-medium transition-colors cursor-pointer"
           >
+            <Zap className="w-3 h-3 text-indigo-600" />
             <span>Simulate {heroMeta.shortName} edit</span>
           </button>
 
-          <button
-            type="button"
-            onClick={onNavigateToInstall}
-            className="inline-flex items-center gap-1.5 px-6 py-3 text-sm font-medium text-[#1D1D1F] bg-white hover:bg-zinc-50 border border-black/[0.09] rounded-full shadow-2xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <span>See what it can do</span>
-            <ChevronRight className="w-4 h-4 text-zinc-400" />
-          </button>
+          <span className="hidden sm:inline text-zinc-300">·</span>
+
+          <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-zinc-600">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Clerk RS256 Auth &amp; Verified Workspaces
+          </span>
+
+          <span className="hidden sm:inline text-zinc-300">·</span>
+
+          <span className="text-[11.5px] font-mono text-zinc-500">
+            &lt;4ms Ultra-low Latency Go Daemon
+          </span>
         </div>
       </section>
 

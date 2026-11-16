@@ -5,7 +5,7 @@ import {
   IdeHostId,
 } from '../types/git';
 import { AgentIcon, OttoLogo } from './AgentIcon';
-import { Check, Smartphone, Laptop, Sparkles } from 'lucide-react';
+import { Check, Smartphone, Laptop, Sparkles, Layers, Monitor, Terminal, ShieldCheck } from 'lucide-react';
 
 interface WhyThisExistsViewProps {
   ideProfiles: IdeAgentProfile[];
@@ -14,6 +14,7 @@ interface WhyThisExistsViewProps {
   onSimulateLiveAgentTick: (ide: IdeHostId) => void;
   onNavigateToFeatures: () => void;
   onNavigateToHome: () => void;
+  onOpenInstallModal?: (tab: 'desktop' | 'ide' | 'daemon') => void;
 }
 
 const GALLERY_SHOTS = [
@@ -81,6 +82,7 @@ export const WhyThisExistsView: React.FC<WhyThisExistsViewProps> = ({
   onSimulateLiveAgentTick,
   onNavigateToFeatures,
   onNavigateToHome,
+  onOpenInstallModal,
 }) => {
   const [selectedSessionIdx, setSelectedSessionIdx] = useState(0);
   const allUnits = [...stagedAtomicStack, ...pushedStack];
@@ -471,21 +473,55 @@ export const WhyThisExistsView: React.FC<WhyThisExistsViewProps> = ({
         </div>
       </section>
 
-      {/* Screen 7: Bottom CTA */}
-      <section className="text-center py-10 space-y-5">
+      {/* Screen 7: Bottom CTA with Universal Multi-Platform Installer */}
+      <section className="text-center py-12 space-y-6">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-b from-[#1E1B4B] via-[#312E81] to-[#F59E0B] text-white mx-auto flex items-center justify-center text-2xl font-bold shadow-md">
           ✦
         </div>
         <h2 className="text-3xl sm:text-5xl font-semibold tracking-[-0.03em] text-[#1D1D1F] max-w-lg mx-auto leading-tight">
           This is for builders who ship all day with AI.
         </h2>
-        <div>
+        <p className="text-sm sm:text-base text-zinc-500 max-w-md mx-auto">
+          Ultra-fast Go daemon (&lt;4ms), Clerk verified authentication, and seamless integration across all 8 agentic IDE environments.
+        </p>
+
+        {/* 3 Prominent Sleek CTA Buttons */}
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('ide') : onNavigateToHome()}
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[#1D1D1F] hover:bg-black text-white text-xs sm:text-sm font-semibold shadow-xs hover:shadow-md transition-all cursor-pointer group"
+          >
+            <Layers className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <span>Install IDE Extension (.vsix for Cursor, VS Code, Windsurf, Kiro, Antigravity)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('desktop') : onNavigateToHome()}
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white hover:bg-zinc-50 border border-black/[0.1] text-zinc-900 text-xs sm:text-sm font-medium shadow-2xs transition-all cursor-pointer"
+          >
+            <Monitor className="w-4 h-4 text-zinc-600" />
+            <span>Download Desktop (Flutter Windows / Mac / Linux)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenInstallModal ? onOpenInstallModal('daemon') : onNavigateToHome()}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-full bg-zinc-100 hover:bg-zinc-200 border border-black/[0.08] text-zinc-800 text-xs sm:text-sm font-mono font-medium transition-all cursor-pointer"
+          >
+            <Terminal className="w-3.5 h-3.5 text-zinc-500" />
+            <span>Run Native Go Daemon (<code className="text-indigo-600 font-semibold">go run cmd/daemon/main.go</code>)</span>
+          </button>
+        </div>
+
+        <div className="pt-2">
           <button
             type="button"
             onClick={onNavigateToHome}
-            className="px-6 py-3 rounded-full bg-[#232325] hover:bg-black text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer"
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
           >
-            Open Live Studio
+            ← Or return to Live Studio Workspace
           </button>
         </div>
       </section>

@@ -34,6 +34,13 @@ import { WhatsPossibleView } from './components/WhatsPossibleView';
 import { OttoDesktopAppView } from './components/OttoDesktopAppView';
 import { OttoLogo } from './components/AgentIcon';
 import {
+  ClerkUserPill,
+  ClerkUserProfile,
+  DEFAULT_CLERK_USER,
+} from './components/ClerkUserPill';
+import { OttoQuickInstallModal } from './components/OttoQuickInstallModal';
+import { Layers, ShieldCheck, Terminal, Zap } from 'lucide-react';
+import {
   DEFAULT_HOTKEY_BINDINGS,
   HotkeyActionId,
   HotkeyBinding,
@@ -235,6 +242,40 @@ export default function App() {
     combo: string;
     timestamp: string;
   } | null>(null);
+
+  const [clerkUser, setClerkUser] = useState<ClerkUserProfile | null>(() => {
+    try {
+      const cached = localStorage.getItem('otto_clerk_user_session');
+      return cached ? JSON.parse(cached) : DEFAULT_CLERK_USER;
+    } catch {
+      return DEFAULT_CLERK_USER;
+    }
+  });
+  const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [installModalTab, setInstallModalTab] = useState<'desktop' | 'ide' | 'daemon'>('ide');
+
+  const handleOpenInstallModal = (tab: 'desktop' | 'ide' | 'daemon' = 'ide') => {
+    setInstallModalTab(tab);
+    setInstallModalOpen(true);
+  };
+
+  const handleClerkSignIn = () => {
+    setClerkUser(DEFAULT_CLERK_USER);
+    try {
+      localStorage.setItem('otto_clerk_user_session', JSON.stringify(DEFAULT_CLERK_USER));
+    } catch {}
+    showTransientNotice(
+      'Signed in with Clerk (Alex Vance · Staff Engineer). RS256 JWT session token synced for IDE extension.'
+    );
+  };
+
+  const handleClerkSignOut = () => {
+    setClerkUser(null);
+    try {
+      localStorage.removeItem('otto_clerk_user_session');
+    } catch {}
+    showTransientNotice('Signed out of Clerk session.');
+  };
 
   useEffect(() => {
     const handlePopState = () => {
@@ -941,35 +982,68 @@ export default function App() {
             </a>
           </nav>
 
-          {/* Zone 3: Clean Moonjar Landing Page Primary CTA + Desktop App Link */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Zone 3: Clean Moonjar Landing Page Primary CTA + Extension Install + Clerk User Profile */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleOpenInstallModal('ide')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-[12px] sm:text-[12.5px] font-medium text-zinc-800 hover:text-zinc-950 bg-white hover:bg-zinc-50 border border-black/[0.08] rounded-full shadow-2xs transition-all whitespace-nowrap shrink-0 cursor-pointer group"
+              title="Install Universal IDE Extension for Cursor, VS Code, Windsurf, Kiro, Antigravity"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
+              <span>Install (.vsix)</span>
+            </button>
+
             <a
               href="/app"
               onClick={(e) => {
                 e.preventDefault();
                 navigateToRoute('/app');
               }}
-              className="px-3.5 py-2 text-[12.5px] sm:text-[13px] font-medium text-[#3F3F46] hover:text-[#18181B] bg-white/80 hover:bg-white border border-black/[0.08] rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              className="px-3 py-1.5 sm:px-3.5 sm:py-2 text-[12px] sm:text-[12.5px] font-medium text-[#3F3F46] hover:text-[#18181B] bg-white/80 hover:bg-white border border-black/[0.08] rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer hidden md:inline-block"
             >
               Open Desktop App
             </a>
+
+            {/* Clerk Authentication User Profile Pill */}
+            <ClerkUserPill
+              user={clerkUser}
+              onSignIn={handleClerkSignIn}
+              onSignOut={handleClerkSignOut}
+              onCopyToken={() =>
+                showTransientNotice('Copied Clerk JWT session token. Paste into your IDE extension settings.')
+              }
+            />
+
             <button
               type="button"
-              onClick={() => {
-                setActiveView('features');
-                setTimeout(() => {
-                  const el = document.getElementById('feat-07-yours');
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  } else {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
-                }, 60);
-              }}
-              className="px-4 sm:px-5 py-2 sm:py-2.5 text-[12.5px] sm:text-[13.5px] font-semibold text-white bg-[#232325] hover:bg-[#141416] rounded-full shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={() => handleOpenInstallModal('ide')}
+              className="px-3.5 sm:px-4 py-1.5 sm:py-2 text-[12px] sm:text-[13px] font-semibold text-white bg-[#232325] hover:bg-[#141416] rounded-full shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
             >
-              Get early access
+              Get started
             </button>
+          </div>
+        </div>
+
+        {/* Global Architecture Highlight Pill */}
+        <div className="max-w-[1180px] w-full mx-auto mt-2 flex items-center justify-between px-4 py-1.5 rounded-full bg-white/70 backdrop-blur-md border border-black/[0.04] text-[11px] text-zinc-600 font-medium overflow-x-auto scrollbar-none shadow-2xs">
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <strong className="text-zinc-800">Native Go Daemon:</strong> &lt;4ms AST Slicer (<code className="text-zinc-700 font-mono">cmd/daemon/main.go</code>)
+            </span>
+            <span className="text-zinc-300">·</span>
+            <span className="inline-flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3 text-indigo-600" />
+              <strong className="text-zinc-800">Clerk Security:</strong> RS256 JWT &amp; Role-based Access
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 pl-3 text-zinc-500 shrink-0">
+            <span className="hidden sm:inline">Universal across 8 IDEs:</span>
+            <span className="font-mono text-[10.5px] text-indigo-600 font-semibold">
+              Cursor · VS Code · Windsurf · Antigravity · Kiro · Claude · Codex · Gemini
+            </span>
           </div>
         </div>
       </header>
@@ -1016,10 +1090,8 @@ export default function App() {
             onPromoteDraftPr={handlePromoteDraftPr}
             onSimulateLiveAgentTick={handleSimulateLiveAgentTick}
             onInjectNotesCapture={handleInjectNotesCapture}
-            onNavigateToInstall={() => {
-              setActiveView('features');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onNavigateToInstall={() => handleOpenInstallModal('ide')}
+            onOpenInstallModal={handleOpenInstallModal}
           />
         )}
 
@@ -1037,6 +1109,7 @@ export default function App() {
               setActiveView('home');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            onOpenInstallModal={handleOpenInstallModal}
           />
         )}
 
@@ -1067,6 +1140,7 @@ export default function App() {
             onUpdateHotkeyBindings={handleUpdateHotkeyBindings}
             lastTriggeredShortcut={lastTriggeredShortcut}
             onTriggerHotkeyAction={handleTriggerHotkeyAction}
+            onOpenInstallModal={handleOpenInstallModal}
           />
         )}
 
@@ -1162,6 +1236,13 @@ export default function App() {
           <span>ATOMIC COMMITS AND STACKED PRS MADE AUTOMATICALLY</span>
         </div>
       </footer>
+
+      {/* Otto Universal Quick Install & Environment Hub */}
+      <OttoQuickInstallModal
+        isOpen={installModalOpen}
+        onClose={() => setInstallModalOpen(false)}
+        initialTab={installModalTab}
+      />
     </div>
   );
 }

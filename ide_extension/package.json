@@ -1,0 +1,128 @@
+{
+  "name": "otto-ide-extension",
+  "displayName": "Otto - Atomic PR & Git Slicer",
+  "description": "Universal IDE extension for Cursor, VS Code, Windsurf, Kiro, and Antigravity. Auto-slices AI agent code edits into <80 LOC atomic commits & stacked PRs.",
+  "version": "1.0.0",
+  "publisher": "otto-git",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Source Control",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "atomic-commits",
+    "stacked-prs",
+    "cursor",
+    "windsurf",
+    "antigravity",
+    "kiro",
+    "clerk",
+    "go-daemon"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:.git"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "otto.openHUD",
+        "title": "Otto: Open Atomic Slicer HUD",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "otto.sliceAndCommit",
+        "title": "Otto: Slice & Commit Current Changes",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "otto.syncNow",
+        "title": "Otto: Sync Stacked PRs with GitHub",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "otto.toggleDaemon",
+        "title": "Otto: Toggle Background Auto-Pilot Daemon",
+        "icon": "$(pulse)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "otto.openHUD",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k",
+        "when": "true"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "otto.openHUD"
+        },
+        {
+          "command": "otto.sliceAndCommit"
+        },
+        {
+          "command": "otto.syncNow"
+        },
+        {
+          "command": "otto.toggleDaemon"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "otto.openHUD",
+          "group": "navigation",
+          "title": "Otto HUD"
+        },
+        {
+          "command": "otto.syncNow",
+          "group": "navigation",
+          "title": "Sync Stack"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Otto Git Slicer",
+      "properties": {
+        "otto.daemonUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Base URL of the Otto local Go daemon / server."
+        },
+        "otto.clerkToken": {
+          "type": "string",
+          "default": "",
+          "description": "Clerk JWT authentication session token for remote stack sync."
+        },
+        "otto.autoPilot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable zero-click background daemon slicing upon file save."
+        },
+        "otto.maxLocPerCommit": {
+          "type": "number",
+          "default": 80,
+          "description": "Maximum LOC allowed in each atomic commit slice."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

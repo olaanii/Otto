@@ -236,6 +236,69 @@ async function startServer() {
     });
   });
 
+  // Universal IDE Daemon Git Analyze Endpoint
+  app.post('/api/git/analyze', (_req, res) => {
+    const totalLoc = appState.workingTreeHunks.reduce(
+      (sum, h) => sum + (h.additions || 0) + (h.deletions || 0),
+      0
+    );
+    res.json({
+      stagedSlices: appState.stagedAtomicStack,
+      totalUncommittedLoc: totalLoc,
+      workingTreeClean: appState.stagedAtomicStack.length === 0,
+      engine: 'otto-ast-slicer',
+    });
+  });
+
+  // Universal IDE Daemon Git Push Stack Endpoint
+  app.post('/api/git/push-stack', (_req, res) => {
+    let highestPr = Math.max(
+      142,
+      ...appState.pushedStack.map((p) => p.prNumber || 140)
+    );
+    const count = appState.stagedAtomicStack.length;
+    const newlyPushed: AtomicCommitUnit[] = appState.stagedAtomicStack.map(
+      (unit) => {
+        highestPr += 1;
+        return {
+          ...unit,
+          status: 'pr_open',
+          prNumber: highestPr,
+        };
+      }
+    );
+    appState.workingTreeHunks = [];
+    appState.stagedAtomicStack = [];
+    appState.pushedStack = [...newlyPushed.reverse(), ...appState.pushedStack];
+    saveState(appState);
+
+    res.json({
+      ok: true,
+      pushedCount: count,
+      latestPrNumber: highestPr,
+      stack: appState.pushedStack,
+    });
+  });
+
+  // Server-Sent Events (SSE) stream for real-time status updates across IDEs
+  const sseClients: express.Response[] = [];
+  app.get('/api/events', (_req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    sseClients.push(res);
+    res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
+
+    _req.on('close', () => {
+      const idx = sseClients.indexOf(res);
+      if (idx !== -1) {
+        sseClients.splice(idx, 1);
+      }
+    });
+  });
+
   // AI + Deterministic Atomic Commit Message Refiner
   app.post('/api/ai/refine-stack', async (req, res) => {
     const { hunks, policy } = req.body as {
