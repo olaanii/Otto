@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Check, Copy } from 'lucide-react';
 import {
+  formatHunkForClipboard,
   NavigableDiffHunk,
   ParsedDiffLine,
   parseUnifiedDiffLines,
@@ -66,25 +68,48 @@ const HighlightedCodeLine: React.FC<HighlightedCodeLineProps> = ({
 
 interface SyntaxHighlightedDiffViewerProps {
   hunk: NavigableDiffHunk;
+  commitHeader?: string;
   totalHunksInCommit: number;
   isFocusedHunk: boolean;
   diffLayout: 'unified' | 'split';
   canExtractHunk: boolean;
   onExtractHunk?: () => void;
   onSelectHunk?: () => void;
+  onCopyHunk?: (hunk: NavigableDiffHunk, formattedPayload: string) => void;
 }
 
 export const SyntaxHighlightedDiffViewer: React.FC<
   SyntaxHighlightedDiffViewerProps
 > = ({
   hunk,
+  commitHeader,
   totalHunksInCommit,
   isFocusedHunk,
   diffLayout,
   canExtractHunk,
   onExtractHunk,
   onSelectHunk,
+  onCopyHunk,
 }) => {
+  const [copiedLocal, setCopiedLocal] = useState(false);
+
+  const handleCopyClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const formatted = formatHunkForClipboard(hunk, commitHeader);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(formatted);
+      }
+    } catch {
+      // Fallback when clipboard permissions are restricted in headless browser
+    }
+    setCopiedLocal(true);
+    onCopyHunk?.(hunk, formatted);
+    window.setTimeout(() => {
+      setCopiedLocal(false);
+    }, 1800);
+  };
+
   const parsedLines: ParsedDiffLine[] = parseUnifiedDiffLines(hunk.diffSnippet);
   const oldSideLines = parsedLines.filter(
     (l) => l.type === 'hunk_header' || l.type === 'del' || l.type === 'context'
@@ -96,6 +121,7 @@ export const SyntaxHighlightedDiffViewer: React.FC<
   return (
     <div
       id={`git-diff-hunk-${hunk.hunkIndex}`}
+      data-testid="syntax-highlighted-diff-viewer"
       onClick={onSelectHunk}
       className={`font-mono text-xs transition-colors ${
         isFocusedHunk
@@ -126,11 +152,37 @@ export const SyntaxHighlightedDiffViewer: React.FC<
           </span>
         </div>
 
-        <div className="flex items-center gap-2.5 text-[11px] tabular-nums shrink-0">
+        <div className="flex items-center gap-2 text-[11px] tabular-nums shrink-0">
           <span className="text-emerald-400 font-medium">
             +{hunk.additions}
           </span>
           <span className="text-rose-400 font-medium">-{hunk.deletions}</span>
+
+          <button
+            type="button"
+            data-testid={`copy-hunk-btn-${hunk.hunkIndex}`}
+            aria-label="Copy Hunk"
+            onClick={handleCopyClick}
+            title="Copy current diff hunk to clipboard for debugging or PR comments"
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+              copiedLocal
+                ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40'
+                : 'bg-white/[0.08] hover:bg-white/[0.16] text-zinc-200 border border-white/[0.08]'
+            }`}
+          >
+            {copiedLocal ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-300" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3 text-zinc-300" />
+                <span>Copy Hunk</span>
+              </>
+            )}
+          </button>
+
           {canExtractHunk && onExtractHunk && (
             <button
               type="button"

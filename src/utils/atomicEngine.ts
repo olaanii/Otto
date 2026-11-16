@@ -822,6 +822,111 @@ export function extractNavigableHunks(hunks: DiffHunk[]): NavigableDiffHunk[] {
   }));
 }
 
+export function formatHunkForClipboard(
+  hunk: Pick<NavigableDiffHunk, 'filePath' | 'summary' | 'diffSnippet' | 'hunkIndex'>,
+  commitHeader?: string
+): string {
+  const headerComment = commitHeader
+    ? `# Commit: ${commitHeader}\n# Hunk ${hunk.hunkIndex}: ${hunk.summary}\n`
+    : `# Hunk ${hunk.hunkIndex}: ${hunk.summary}\n`;
+  return `${headerComment}diff --git a/${hunk.filePath} b/${hunk.filePath}\n--- a/${hunk.filePath}\n+++ b/${hunk.filePath}\n${hunk.diffSnippet.trim()}`;
+}
+
+export interface StackedSearchMatch {
+  id: string;
+  kind: 'commit' | 'hunk';
+  commitId: string;
+  commitSha: string;
+  conventionalHeader: string;
+  branchName: string;
+  prNumber?: number;
+  status: AtomicCommitUnit['status'];
+  hunkIndex: number;
+  totalHunksInCommit: number;
+  filePath: string;
+  summary: string;
+  matchedLinePreview: string;
+}
+
+export function searchStackedCommitsAndHunks(
+  units: AtomicCommitUnit[],
+  rawQuery: string
+): StackedSearchMatch[] {
+  const query = (rawQuery || '').trim().toLowerCase();
+  if (!query) return [];
+
+  const results: StackedSearchMatch[] = [];
+
+  for (const unit of units) {
+    const resolvedHunks = resolveCommitRealHunks(unit);
+    const navHunks = extractNavigableHunks(resolvedHunks);
+    const prLabel = unit.prNumber ? `pr #${unit.prNumber} #${unit.prNumber}` : '';
+
+    const commitHaystack = [
+      unit.conventionalHeader,
+      unit.title,
+      unit.scope,
+      unit.type,
+      unit.branchName,
+      unit.sha,
+      prLabel,
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    const commitMatched = commitHaystack.includes(query);
+
+    if (commitMatched && navHunks.length > 0) {
+      const firstHunk = navHunks[0];
+      results.push({
+        id: `commit::${unit.id}`,
+        kind: 'commit',
+        commitId: unit.id,
+        commitSha: unit.sha || '',
+        conventionalHeader: unit.conventionalHeader,
+        branchName: unit.branchName,
+        prNumber: unit.prNumber,
+        status: unit.status,
+        hunkIndex: 1,
+        totalHunksInCommit: navHunks.length,
+        filePath: firstHunk.filePath,
+        summary: unit.title,
+        matchedLinePreview: `${unit.branchName} · +${unit.totalAdditions} / -${unit.totalDeletions} (${unit.totalLoc} LOC)`,
+      });
+    }
+
+    for (const navHunk of navHunks) {
+      const fileMatched = navHunk.filePath.toLowerCase().includes(query);
+      const summaryMatched = navHunk.summary.toLowerCase().includes(query);
+      const matchingDiffLine = navHunk.diffSnippet
+        .split('\n')
+        .find((line) => line.toLowerCase().includes(query));
+
+      if (fileMatched || summaryMatched || matchingDiffLine) {
+        results.push({
+          id: `hunk::${unit.id}::${navHunk.id}`,
+          kind: 'hunk',
+          commitId: unit.id,
+          commitSha: unit.sha || '',
+          conventionalHeader: unit.conventionalHeader,
+          branchName: unit.branchName,
+          prNumber: unit.prNumber,
+          status: unit.status,
+          hunkIndex: navHunk.hunkIndex,
+          totalHunksInCommit: navHunks.length,
+          filePath: navHunk.filePath,
+          summary: navHunk.summary,
+          matchedLinePreview: matchingDiffLine
+            ? matchingDiffLine.trim()
+            : navHunk.hunkHeader,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
 export function resolveCommitRealHunks(unit: AtomicCommitUnit): DiffHunk[] {
   if (Array.isArray(unit.hunks) && unit.hunks.length > 0) {
     return unit.hunks.map((hunk) => {

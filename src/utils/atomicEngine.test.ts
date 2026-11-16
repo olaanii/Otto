@@ -391,6 +391,58 @@ test('parseUnifiedDiffLines and resolveCommitRealHunks parse exact line numbers 
   }
 });
 
+test('formatHunkForClipboard and searchStackedCommitsAndHunks format diff patches and find commits or hunks across stacked PRs', async () => {
+  const {
+    extractNavigableHunks,
+    formatHunkForClipboard,
+    resolveCommitRealHunks,
+    searchStackedCommitsAndHunks,
+  } = await import('./atomicEngine');
+  const {
+    INITIAL_POLICY,
+    INITIAL_PUSHED_STACK,
+    INITIAL_WORKING_TREE_HUNKS,
+  } = await import('./seedData');
+
+  const stagedSlices = sliceHunksIntoAtomicCommits(
+    INITIAL_WORKING_TREE_HUNKS,
+    INITIAL_POLICY
+  );
+  const allUnits = [...stagedSlices, ...INITIAL_PUSHED_STACK];
+
+  const firstUnit = allUnits[0];
+  const firstNavHunk = extractNavigableHunks(resolveCommitRealHunks(firstUnit))[0];
+
+  const clipboardText = formatHunkForClipboard(
+    firstNavHunk,
+    firstUnit.conventionalHeader
+  );
+  assert.ok(clipboardText.includes(`# Commit: ${firstUnit.conventionalHeader}`));
+  assert.ok(clipboardText.includes(`diff --git a/${firstNavHunk.filePath} b/${firstNavHunk.filePath}`));
+  assert.ok(clipboardText.includes('@@'));
+
+  // Search by PR number (#142)
+  const prMatches = searchStackedCommitsAndHunks(allUnits, '#142');
+  assert.ok(prMatches.length >= 1);
+  assert.equal(prMatches[0].prNumber, 142);
+
+  // Search by specific code token inside a diff hunk (e.g. 'timingSafeEqual')
+  const hunkCodeMatches = searchStackedCommitsAndHunks(
+    allUnits,
+    'timingSafeEqual'
+  );
+  assert.ok(hunkCodeMatches.length >= 1);
+  assert.ok(
+    hunkCodeMatches.some(
+      (m) => m.kind === 'hunk' && m.filePath.includes('signatureCrypto.ts')
+    )
+  );
+
+  // Empty query returns empty array
+  assert.deepEqual(searchStackedCommitsAndHunks(allUnits, '   '), []);
+});
+
+
 
 
 

@@ -21,8 +21,11 @@ import {
 } from '../utils/hotkeyManager';
 import {
   extractNavigableHunks,
+  formatHunkForClipboard,
   parseUnifiedDiffLines,
   resolveCommitRealHunks,
+  searchStackedCommitsAndHunks,
+  StackedSearchMatch,
 } from '../utils/atomicEngine';
 import { SyntaxHighlightedDiffViewer } from './SyntaxHighlightedDiffViewer';
 import {
@@ -31,6 +34,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   GitBranch,
   GitCommit,
   GitMerge,
@@ -40,6 +44,7 @@ import {
   PanelLeft,
   Plus,
   Scissors,
+  Search,
   Share,
   Sparkles,
   X,
@@ -154,11 +159,29 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
     null
   );
   const [showAllCompleted, setShowAllCompleted] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const [copiedToolbarHunk, setCopiedToolbarHunk] = useState(false);
+  const [lastCopiedClipboardText, setLastCopiedClipboardText] = useState('');
+  const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const prevHeadIdsRef = useRef<{ stagedHead?: string; pushedHead?: string }>({
     stagedHead: stagedAtomicStack[0]?.id,
     pushedHead: pushedStack[0]?.id,
   });
+
+  // Global Cmd+K / Ctrl+K shortcut to focus the top search bar
+  useEffect(() => {
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        globalSearchInputRef.current?.focus();
+        setIsSearchDropdownOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => window.removeEventListener('keydown', onWindowKeyDown);
+  }, []);
 
   // Automatically select newly sliced or auto-pushed real-time commits so the Git Diff panel updates immediately
   useEffect(() => {
@@ -253,6 +276,56 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
     setShowAllCommitHunks(false);
   };
 
+  const handleCopyActiveHunk = async () => {
+    const targetHunk = currentNavigableHunk || navigableHunks[0];
+    if (!targetHunk) return;
+    const formatted = formatHunkForClipboard(
+      targetHunk,
+      activeUnit?.conventionalHeader
+    );
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(formatted);
+      }
+    } catch {
+      // Fallback when clipboard permissions are restricted in headless browser
+    }
+    setLastCopiedClipboardText(formatted);
+    setCopiedToolbarHunk(true);
+    window.setTimeout(() => {
+      setCopiedToolbarHunk(false);
+    }, 1800);
+  };
+
+  const searchMatches = useMemo(
+    () => searchStackedCommitsAndHunks(allUnits, globalSearchQuery),
+    [allUnits, globalSearchQuery]
+  );
+
+  const matchedCommitIdSet = useMemo(
+    () => new Set(searchMatches.map((m) => m.commitId)),
+    [searchMatches]
+  );
+
+  const filteredStagedStack = useMemo(() => {
+    if (!globalSearchQuery.trim()) return stagedAtomicStack;
+    return stagedAtomicStack.filter((u) => matchedCommitIdSet.has(u.id));
+  }, [stagedAtomicStack, globalSearchQuery, matchedCommitIdSet]);
+
+  const filteredPushedStack = useMemo(() => {
+    if (!globalSearchQuery.trim()) return pushedStack;
+    return pushedStack.filter((u) => matchedCommitIdSet.has(u.id));
+  }, [pushedStack, globalSearchQuery, matchedCommitIdSet]);
+
+  const handleSelectSearchMatch = (match: StackedSearchMatch) => {
+    setSelectedUnitId(match.commitId);
+    setSelectedFileFilter('all');
+    setShowAllCommitHunks(false);
+    setActiveHunkCursor(Math.max(0, match.hunkIndex - 1));
+    setCanvasMode('sliced');
+    setIsSearchDropdownOpen(false);
+  };
+
   const activeAgentMeta =
     AGENT_ICON_ASSETS[activeAgent] || AGENT_ICON_ASSETS['claude-code'];
 
@@ -290,9 +363,10 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
     setRecordingActionId(null);
   };
 
-  const visibleCompleted = showAllCompleted
-    ? pushedStack
-    : pushedStack.slice(0, 4);
+  const visibleCompleted =
+    showAllCompleted || Boolean(globalSearchQuery.trim())
+      ? filteredPushedStack
+      : filteredPushedStack.slice(0, 4);
 
   const primaryHunk = activeHunks[0] || workingTreeHunks[0];
   const primaryParsedPreview = useMemo(() => {
@@ -346,13 +420,129 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
           </div>
         </div>
 
-        {/* Center Segmented Pill ("Sliced" | "Original" — matches "Styled" | "Original" in screenshot) */}
-        <div className="flex-1 flex items-center justify-between px-4 min-w-0">
-          <div className="hidden xl:flex items-center gap-2 text-[11px] font-mono text-zinc-500 whitespace-nowrap truncate">
-            <span className="truncate">{githubConfig.owner}/{githubConfig.repo}</span>
+        {/* Center Bar: Global Search Bar + Segmented Mode Toggle + Actions */}
+        <div className="flex-1 flex items-center justify-between gap-3 px-4 min-w-0">
+          {/* Global Search Bar for Commits & Diff Hunks across Stacked PRs */}
+          <div className="relative flex-1 max-w-[360px] min-w-[200px]">
+            <div className="flex items-center gap-2 bg-white hover:bg-zinc-50/90 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/30 border border-black/[0.08] rounded-full px-3 py-1 shadow-2xs transition-all">
+              <Search className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <input
+                ref={globalSearchInputRef}
+                type="text"
+                role="searchbox"
+                data-testid="global-search-input"
+                aria-label="Global search commits and hunks"
+                value={globalSearchQuery}
+                onFocus={() => setIsSearchDropdownOpen(true)}
+                onChange={(e) => {
+                  setGlobalSearchQuery(e.target.value);
+                  setIsSearchDropdownOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setIsSearchDropdownOpen(false);
+                  } else if (e.key === 'Enter' && searchMatches.length > 0) {
+                    e.preventDefault();
+                    handleSelectSearchMatch(searchMatches[0]);
+                  }
+                }}
+                placeholder="Search commits, PRs, files, or hunks... (⌘K)"
+                className="w-full bg-transparent text-xs text-[#1D1D1F] placeholder:text-zinc-400 focus:outline-none"
+              />
+              {globalSearchQuery ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  data-testid="clear-global-search-btn"
+                  onClick={() => {
+                    setGlobalSearchQuery('');
+                    setIsSearchDropdownOpen(false);
+                  }}
+                  className="p-0.5 rounded-full hover:bg-zinc-200/70 text-zinc-400 hover:text-zinc-700 cursor-pointer shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              ) : (
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-zinc-100 border border-black/[0.07] font-mono text-[9.5px] text-zinc-400 shrink-0">
+                  ⌘K
+                </kbd>
+              )}
+            </div>
+
+            {/* Global Search Results Dropdown across Stacked PRs & Diff Hunks */}
+            {isSearchDropdownOpen && globalSearchQuery.trim().length > 0 && (
+              <div
+                data-testid="global-search-results"
+                role="listbox"
+                aria-label="Search Results for Commits and Hunks"
+                className="absolute left-0 top-full mt-1.5 w-[440px] max-w-[85vw] max-h-[380px] overflow-y-auto z-50 rounded-2xl bg-[#181B24] text-zinc-100 border border-white/[0.12] shadow-2xl p-2 space-y-1 font-mono text-xs"
+              >
+                <div className="px-2.5 py-1.5 flex items-center justify-between text-[10px] text-zinc-400 border-b border-white/[0.07]">
+                  <span>
+                    {searchMatches.length}{' '}
+                    {searchMatches.length === 1 ? 'match' : 'matches'} across{' '}
+                    {allUnits.length} stacked commits &amp; PRs
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchDropdownOpen(false)}
+                    className="text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    Esc
+                  </button>
+                </div>
+
+                {searchMatches.length === 0 ? (
+                  <div className="px-3 py-5 text-center text-zinc-400 text-xs">
+                    No commits, files, or diff hunks matching &ldquo;
+                    {globalSearchQuery}&rdquo;
+                  </div>
+                ) : (
+                  searchMatches.slice(0, 12).map((match) => (
+                    <button
+                      key={match.id}
+                      type="button"
+                      data-testid="global-search-result-item"
+                      onClick={() => handleSelectSearchMatch(match)}
+                      className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.08] transition-colors flex flex-col gap-1 cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[9.5px] font-semibold uppercase shrink-0 ${
+                              match.kind === 'hunk'
+                                ? 'bg-indigo-500/25 text-indigo-200 border border-indigo-400/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                            }`}
+                          >
+                            {match.kind === 'hunk'
+                              ? `Hunk ${match.hunkIndex}/${match.totalHunksInCommit}`
+                              : 'Commit'}
+                          </span>
+                          <span className="text-zinc-100 font-semibold truncate">
+                            {match.filePath}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-zinc-400 shrink-0">
+                          {match.prNumber
+                            ? `PR #${match.prNumber}`
+                            : match.commitSha}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-zinc-300 truncate">
+                        {match.conventionalHeader}
+                      </div>
+                      <div className="text-[10px] text-emerald-300/90 bg-black/30 px-2 py-0.5 rounded truncate">
+                        {match.matchedLinePreview}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="mx-auto inline-flex items-center bg-[#E6E3DC] p-0.5 rounded-full border border-black/[0.05] shrink-0">
+          <div className="inline-flex items-center bg-[#E6E3DC] p-0.5 rounded-full border border-black/[0.05] shrink-0">
             <button
               type="button"
               onClick={() => setCanvasMode('sliced')}
@@ -517,15 +707,15 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                     Working on
                   </span>
                   <span className="text-[11px] text-zinc-400 tabular-nums">
-                    {stagedAtomicStack.length === 0
-                      ? 'No active items'
-                      : `${stagedAtomicStack.length} active slices`}
+                    {filteredStagedStack.length === 0
+                      ? 'No matching items'
+                      : `${filteredStagedStack.length} active slices`}
                   </span>
                 </div>
 
-                {stagedAtomicStack.length > 0 && (
+                {filteredStagedStack.length > 0 && (
                   <div className="space-y-1.5">
-                    {stagedAtomicStack.map((slice, idx) => {
+                    {filteredStagedStack.map((slice, idx) => {
                       const isSelected = activeUnit?.id === slice.id;
                       return (
                         <button
@@ -795,9 +985,9 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                   </div>
                 </div>
 
-                {/* Hunk Navigation Arrows & File Hunk Selector Bar */}
+                {/* Hunk Navigation Arrows, Copy Hunk & File Hunk Selector Bar */}
                 <div className="px-4 py-2 bg-[#161922] border-b border-white/[0.07] flex flex-wrap items-center justify-between gap-2 shrink-0 font-mono text-[11px]">
-                  {/* Left: Hunk Cycling Navigation Arrows */}
+                  {/* Left: Hunk Cycling Navigation Arrows + All Hunks + Copy Hunk */}
                   <div className="flex items-center gap-2 shrink-0">
                     <div
                       role="group"
@@ -806,6 +996,7 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                     >
                       <button
                         type="button"
+                        data-testid="prev-hunk-button"
                         onClick={handlePrevHunk}
                         aria-label="Previous Hunk"
                         title="Previous Hunk in Commit"
@@ -813,11 +1004,15 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                       >
                         <ChevronLeft className="w-3.5 h-3.5" />
                       </button>
-                      <span className="px-2.5 py-0.5 text-[11px] font-semibold text-indigo-200 tabular-nums whitespace-nowrap">
+                      <span
+                        data-testid="hunk-counter-badge"
+                        className="px-2.5 py-0.5 text-[11px] font-semibold text-indigo-200 tabular-nums whitespace-nowrap"
+                      >
                         Hunk {safeHunkCursor + 1} of {navigableHunks.length}
                       </span>
                       <button
                         type="button"
+                        data-testid="next-hunk-button"
                         onClick={handleNextHunk}
                         aria-label="Next Hunk"
                         title="Next Hunk in Commit"
@@ -843,6 +1038,33 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                       {showAllCommitHunks
                         ? `Showing All (${navigableHunks.length})`
                         : `All Hunks (${navigableHunks.length})`}
+                    </button>
+
+                    {/* Dedicated 'Copy Hunk' Button in Git Diff Toolbar */}
+                    <button
+                      type="button"
+                      data-testid="copy-hunk-toolbar-btn"
+                      aria-label="Copy Hunk"
+                      data-copied-payload={lastCopiedClipboardText ? 'ready' : 'idle'}
+                      onClick={handleCopyActiveHunk}
+                      title="Copy current diff hunk to clipboard for external debugging or manual PR comments"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md whitespace-nowrap transition-colors cursor-pointer ${
+                        copiedToolbarHunk
+                          ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 font-semibold'
+                          : 'bg-white/[0.06] hover:bg-white/[0.14] text-zinc-200 border border-white/[0.1]'
+                      }`}
+                    >
+                      {copiedToolbarHunk ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-300" />
+                          <span>Copied Hunk!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-indigo-300" />
+                          <span>Copy Hunk</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -896,6 +1118,7 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                     <SyntaxHighlightedDiffViewer
                       key={navHunk.id}
                       hunk={navHunk}
+                      commitHeader={activeUnit.conventionalHeader}
                       totalHunksInCommit={navigableHunks.length}
                       isFocusedHunk={currentNavigableHunk?.id === navHunk.id}
                       diffLayout={diffLayout}
@@ -908,6 +1131,13 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                       onSelectHunk={() =>
                         setActiveHunkCursor(navHunk.hunkIndex - 1)
                       }
+                      onCopyHunk={(_copiedHunk, payload) => {
+                        setLastCopiedClipboardText(payload);
+                        setCopiedToolbarHunk(true);
+                        window.setTimeout(() => {
+                          setCopiedToolbarHunk(false);
+                        }, 1800);
+                      }}
                     />
                   ))}
                 </div>
