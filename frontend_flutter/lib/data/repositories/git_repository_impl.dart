@@ -23,10 +23,17 @@ class GitRepositoryImpl implements IGitRepository {
       fetchWorkspaceState() async {
     try {
       final stateData = await restDataSource.getWorkspaceState();
-      final branch = stateData['current_branch'] as String? ?? 'main';
+      final branch = stateData['current_branch'] as String? ??
+          (stateData['githubConfig'] is Map
+              ? (stateData['githubConfig'] as Map)['defaultBranch'] as String?
+              : null) ??
+          'main';
 
-      // Parse stacked commits into AtomicCommitUnits
-      final rawCommits = stateData['commits'] as List<dynamic>? ?? [];
+      // Parse stacked commits into AtomicCommitUnits (supports Go daemon, Express, and IDE extension formats)
+      final rawCommits = (stateData['commits'] ??
+              stateData['stagedAtomicStack'] ??
+              stateData['stack']) as List<dynamic>? ??
+          [];
       final commits = rawCommits
           .map((item) => AtomicCommitUnit.fromJson(item as Map<String, dynamic>))
           .toList();
@@ -112,7 +119,10 @@ class GitRepositoryImpl implements IGitRepository {
   Future<StackDependencyGraph> rebaseAndReorderStack(List<String> orderedCommitIds) async {
     try {
       final data = await restDataSource.rebaseStack(orderedCommitIds);
-      final rawCommits = data['commits'] as List<dynamic>? ?? [];
+      final rawCommits = (data['commits'] ??
+              data['stagedAtomicStack'] ??
+              data['stack']) as List<dynamic>? ??
+          [];
       final commits = rawCommits
           .map((item) => AtomicCommitUnit.fromJson(item as Map<String, dynamic>))
           .toList();

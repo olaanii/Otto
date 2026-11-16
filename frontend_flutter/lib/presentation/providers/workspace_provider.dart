@@ -198,10 +198,13 @@ final workspaceProvider = StateNotifierProvider<WorkspaceNotifier, WorkspaceStat
     pushStackUseCase: push,
   );
 
-  // Auto-refresh when SSE events arrive
+  // Auto-refresh when SSE events arrive (named events or generic state JSON payloads)
   ref.listen<AsyncValue<SseEvent>>(gitEventsStreamProvider, (_, next) {
     next.whenData((event) {
-      if (event.event == 'workspace_changed' || event.event == 'git_diff') {
+      if (event.isWorkspaceUpdate ||
+          event.event == 'workspace_changed' ||
+          event.event == 'file_changed' ||
+          event.event == 'git_diff') {
         notifier.refreshWorkspace();
       }
     });

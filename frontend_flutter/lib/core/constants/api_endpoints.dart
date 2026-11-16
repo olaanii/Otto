@@ -1,27 +1,35 @@
 /// API and SSE endpoints connecting the Otto Flutter multiplatform client
-/// to the Otto local Go daemon.
+/// to the Otto local daemon and Express server.
 class ApiEndpoints {
   const ApiEndpoints._();
 
-  static const String baseUrl = 'http://localhost:3000/api';
-  static const String sseStreamUrl = 'http://localhost:3000/api/git/events';
+  static const String baseUrl = 'http://localhost:3000';
+  static const String sseStreamUrl = 'http://localhost:3000/api/events';
+
+  // Standardized Core Endpoints
+  static const String state = '/api/state';
+  static const String analyzeDiff = '/api/git/analyze';
+  static const String pushStack = '/api/git/push-stack';
+  static const String splitCommit = '/api/git/split';
+  static const String rebase = '/api/git/rebase';
+  static const String refineStack = '/api/ai/refine-stack';
+  static const String events = '/api/events';
+  static const String providers = '/api/llm/providers';
+  static const String syncStatus = '/api/github/sync-status';
+  static const String syncNow = '/api/github/sync-now';
 
   // Auth & Session
   static const String clerkVerify = '/auth/clerk-verify';
   static const String clerkSession = '/auth/session';
   static const String clerkSignOut = '/auth/signout';
 
-  // Git Workspace & Stacking
-  static const String workspaceState = '/git/workspace';
-  static const String rawDiff = '/git/diff';
-  static const String sliceDiff = '/git/slice';
-  static const String createCommit = '/git/commit';
-  static const String splitCommit = '/git/split';
-  static const String rebaseStack = '/git/rebase';
-  static const String pushStack = '/git/push-stack';
-
-  // LLM Providers & Agent Integration
-  static const String llmRefineStack = '/llm/refine';
-  static const String llmProviders = '/llm/providers';
-  static const String llmStreamGenerate = '/llm/generate-stream';
+  // Compatibility aliases
+  static const String workspaceState = state;
+  static const String rawDiff = analyzeDiff;
+  static const String sliceDiff = analyzeDiff;
+  static const String createCommit = '/api/git/commit';
+  static const String rebaseStack = rebase;
+  static const String llmRefineStack = refineStack;
+  static const String llmProviders = providers;
+  static const String llmStreamGenerate = '/api/llm/generate-stream';
 }

@@ -99,6 +99,7 @@ class AtomicCommitUnit {
   Map<String, dynamic> toJson() => {
         'id': id,
         'summary': summary,
+        'title': summary, // Server schema compatibility
         'description': description,
         'type': type,
         'scope': scope,
@@ -106,39 +107,114 @@ class AtomicCommitUnit {
         'timestamp': timestamp.toIso8601String(),
         'changedFiles': changedFiles,
         'additions': additions,
+        'totalAdditions': additions, // Server schema compatibility
         'deletions': deletions,
+        'totalDeletions': deletions, // Server schema compatibility
         'prNumber': prNumber,
         'branchName': branchName,
         'parentCommitId': parentCommitId,
+        'parentBranch': parentCommitId, // Server schema compatibility
         'isPushed': isPushed,
         'status': status.name,
         'agentProfileId': agentProfileId,
       };
 
-  factory AtomicCommitUnit.fromJson(Map<String, dynamic> json) => AtomicCommitUnit(
-        id: json['id'] as String?,
-        summary: json['summary'] as String? ?? 'Untitled Commit',
-        description: json['description'] as String?,
-        type: json['type'] as String? ?? 'feat',
-        scope: json['scope'] as String?,
-        author: json['author'] as String? ?? 'Otto User',
-        timestamp: json['timestamp'] != null
-            ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now()
-            : DateTime.now(),
-        changedFiles: (json['changedFiles'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            const [],
-        additions: json['additions'] as int? ?? 0,
-        deletions: json['deletions'] as int? ?? 0,
-        prNumber: json['prNumber'] as int?,
-        branchName: json['branchName'] as String? ?? 'stack-branch',
-        parentCommitId: json['parentCommitId'] as String?,
-        isPushed: json['isPushed'] as bool? ?? false,
-        status: CommitStatus.values.firstWhere(
-          (e) => e.name == json['status'],
-          orElse: () => CommitStatus.draft,
-        ),
-        agentProfileId: json['agentProfileId'] as String?,
-      );
+  static CommitStatus parseStatus(dynamic rawStatus) {
+    if (rawStatus == null) return CommitStatus.draft;
+    final statusStr = rawStatus.toString().toLowerCase().trim();
+    switch (statusStr) {
+      case 'pr_open':
+      case 'open':
+      case 'inreview':
+      case 'in_review':
+        return CommitStatus.inReview;
+      case 'staged':
+      case 'queued':
+      case 'readytopush':
+      case 'ready_to_push':
+        return CommitStatus.readyToPush;
+      case 'pushed':
+        return CommitStatus.pushed;
+      case 'merged':
+        return CommitStatus.merged;
+      case 'conflicted':
+        return CommitStatus.conflicted;
+      case 'draft':
+        return CommitStatus.draft;
+      default:
+        for (final val in CommitStatus.values) {
+          if (val.name.toLowerCase() == statusStr) {
+            return val;
+          }
+        }
+        return CommitStatus.draft;
+    }
+  }
+
+  factory AtomicCommitUnit.fromJson(Map<String, dynamic> json) {
+    final status = parseStatus(json['status']);
+
+    // Resilient parsing: accept 'title' or 'summary'
+    final summary = (json['summary'] ?? json['title']) as String? ?? 'Untitled Commit';
+
+    // Resilient parsing: accept 'totalAdditions' or 'additions'
+    final rawAdditions = json['additions'] ?? json['totalAdditions'];
+    final additions = (rawAdditions is num) ? rawAdditions.toInt() : 0;
+
+    // Resilient parsing: accept 'totalDeletions' or 'deletions'
+    final rawDeletions = json['deletions'] ?? json['totalDeletions'];
+    final deletions = (rawDeletions is num) ? rawDeletions.toInt() : 0;
+
+    // Resilient parsing: accept 'parentBranch' or 'parentCommitId'
+    final parentCommitId = (json['parentCommitId'] ?? json['parentBranch']) as String?;
+
+    // Extract changed files directly or dynamically from hunks
+    List<String> files = const [];
+    if (json['changedFiles'] is List) {
+      files = (json['changedFiles'] as List).map((e) => e.toString()).toList();
+    } else if (json['hunks'] is List) {
+      files = (json['hunks'] as List)
+          .map((h) => h is Map ? (h['filePath']?.toString()) : null)
+          .whereType<String>()
+          .toSet()
+          .toList();
+    }
+
+    final isPushed = (json['isPushed'] as bool?) ??
+        (status == CommitStatus.pushed ||
+            status == CommitStatus.inReview ||
+            status == CommitStatus.merged);
+
+    final rawPr = json['prNumber'];
+    final prNumber = (rawPr is num) ? rawPr.toInt() : null;
+
+    final rawDate = json['timestamp'] ?? json['createdAt'];
+    final timestamp = rawDate != null
+        ? DateTime.tryParse(rawDate.toString()) ?? DateTime.now()
+        : DateTime.now();
+
+    final description = (json['description'] as String?) ??
+        (json['bodyBullets'] is List
+            ? (json['bodyBullets'] as List).map((e) => e.toString()).join('\n')
+            : null);
+
+    return AtomicCommitUnit(
+      id: (json['id'] ?? json['sha']) as String?,
+      summary: summary,
+      description: description,
+      type: json['type'] as String? ?? 'feat',
+      scope: json['scope'] as String?,
+      author: json['author'] as String? ?? 'Otto User',
+      timestamp: timestamp,
+      changedFiles: files,
+      additions: additions,
+      deletions: deletions,
+      prNumber: prNumber,
+      branchName: json['branchName'] as String? ?? 'stack-branch',
+      parentCommitId: parentCommitId,
+      isPushed: isPushed,
+      status: status,
+      agentProfileId: json['agentProfileId'] as String?,
+    );
+  }
 }

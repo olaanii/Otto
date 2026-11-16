@@ -12,13 +12,20 @@ class StackDependencyGraph {
   }) : adjacencyList = adjacencyList ?? _buildAdjacencyList(commits);
 
   static Map<String, List<String>> _buildAdjacencyList(List<AtomicCommitUnit> commits) {
+    final commitMap = {for (final c in commits) c.id: c};
+    final branchMap = {for (final c in commits) c.branchName: c};
     final adj = <String, List<String>>{};
     for (final c in commits) {
       adj.putIfAbsent(c.id, () => []);
       if (c.parentCommitId != null) {
-        adj.putIfAbsent(c.parentCommitId!, () => []);
-        if (!adj[c.parentCommitId!]!.contains(c.id)) {
-          adj[c.parentCommitId!]!.add(c.id);
+        // Resolve parent by commit ID or branch name within local stack.
+        // If parent points to an external branch ('main', 'origin/main'), no edge is added.
+        final parent = commitMap[c.parentCommitId] ?? branchMap[c.parentCommitId];
+        if (parent != null) {
+          adj.putIfAbsent(parent.id, () => []);
+          if (!adj[parent.id]!.contains(c.id)) {
+            adj[parent.id]!.add(c.id);
+          }
         }
       }
     }
@@ -30,6 +37,7 @@ class StackDependencyGraph {
   /// Throws [StateError] if a cyclic dependency is detected.
   List<AtomicCommitUnit> topologicalSort() {
     final commitMap = {for (final c in commits) c.id: c};
+    final branchToIdMap = {for (final c in commits) c.branchName: c.id};
     final inDegree = <String, int>{};
 
     for (final c in commits) {
@@ -37,6 +45,11 @@ class StackDependencyGraph {
     }
 
     for (final entry in adjacencyList.entries) {
+      final sourceId = commitMap.containsKey(entry.key)
+          ? entry.key
+          : branchToIdMap[entry.key];
+      // Only consider edges originating from commits within this local stack
+      if (sourceId == null) continue;
       for (final childId in entry.value) {
         if (inDegree.containsKey(childId)) {
           inDegree[childId] = (inDegree[childId] ?? 0) + 1;
@@ -61,7 +74,10 @@ class StackDependencyGraph {
         sortedResult.add(commit);
       }
 
-      final neighbors = adjacencyList[currentId] ?? [];
+      final neighbors = [
+        ...?adjacencyList[currentId],
+        if (commit?.branchName != null) ...?adjacencyList[commit!.branchName],
+      ];
       for (final neighborId in neighbors) {
         if (inDegree.containsKey(neighborId)) {
           inDegree[neighborId] = inDegree[neighborId]! - 1;
@@ -85,15 +101,18 @@ class StackDependencyGraph {
     for (int i = 0; i < proposedCommitIds.length; i++) {
       indexMap[proposedCommitIds[i]] = i;
     }
+    final commitMap = {for (final c in commits) c.id: c};
+    final branchMap = {for (final c in commits) c.branchName: c};
 
     for (final commit in commits) {
-      if (commit.parentCommitId != null &&
-          indexMap.containsKey(commit.id) &&
-          indexMap.containsKey(commit.parentCommitId)) {
-        final parentIdx = indexMap[commit.parentCommitId!]!;
-        final childIdx = indexMap[commit.id]!;
-        if (parentIdx >= childIdx) {
-          return false;
+      if (commit.parentCommitId != null && indexMap.containsKey(commit.id)) {
+        final parent = commitMap[commit.parentCommitId] ?? branchMap[commit.parentCommitId];
+        if (parent != null && indexMap.containsKey(parent.id)) {
+          final parentIdx = indexMap[parent.id]!;
+          final childIdx = indexMap[commit.id]!;
+          if (parentIdx >= childIdx) {
+            return false;
+          }
         }
       }
     }

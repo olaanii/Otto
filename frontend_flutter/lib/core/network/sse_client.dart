@@ -17,17 +17,38 @@ class SseEvent {
 
   Map<String, dynamic> parseJson() {
     try {
-      return jsonDecode(data) as Map<String, dynamic>;
+      final decoded = jsonDecode(data);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return {'raw': data};
     } catch (_) {
       return {'raw': data};
     }
+  }
+
+  /// Returns true if this event indicates workspace or file changes that require refreshing state.
+  /// Handles named events ('workspace_changed', 'file_changed', 'git_diff')
+  /// as well as generic messages with JSON payloads containing 'stagedAtomicStack' or 'type: state_updated'.
+  bool get isWorkspaceUpdate {
+    if (event == 'workspace_changed' || event == 'file_changed' || event == 'git_diff') {
+      return true;
+    }
+    final json = parseJson();
+    if (json.containsKey('stagedAtomicStack') ||
+        json['type'] == 'state_updated' ||
+        json['event'] == 'workspace_changed' ||
+        json['event'] == 'file_changed') {
+      return true;
+    }
+    return false;
   }
 
   @override
   String toString() => 'SseEvent(event: $event, id: $id, data: $data)';
 }
 
-/// SSE client subscribing to real-time events emitted by the Otto Go daemon.
+/// SSE client subscribing to real-time events emitted by the Otto daemon or server.
 class SseClient {
   final String url;
   final SecureStorageService secureStorage;
@@ -45,6 +66,10 @@ class SseClient {
   }) : _dio = dio ?? Dio();
 
   bool get isConnected => _isConnected;
+
+  /// Filtered stream that emits whenever a workspace or file change event arrives.
+  Stream<SseEvent> get onWorkspaceChanged =>
+      subscribe().where((e) => e.isWorkspaceUpdate);
 
   /// Returns a broadcast stream of server-sent events.
   Stream<SseEvent> subscribe() {
@@ -124,10 +149,20 @@ class SseClient {
       }
     } catch (e) {
       _isConnected = false;
-      if (!_isDisposed && !_controller!.isClosed) {
-        // Auto-reconnect after 3 seconds on disconnection
+      final isCancelled = _cancelToken?.isCancelled ?? false;
+      if (!isCancelled &&
+          !_isDisposed &&
+          _controller != null &&
+          !_controller!.isClosed &&
+          _controller!.hasListener) {
+        // Auto-reconnect after 3 seconds on disconnection if active subscribers remain
         Future.delayed(const Duration(seconds: 3), () {
-          if (!_isDisposed) _startListening();
+          if (!_isDisposed &&
+              _controller != null &&
+              !_controller!.isClosed &&
+              _controller!.hasListener) {
+            _startListening();
+          }
         });
       }
     } finally {

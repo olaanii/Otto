@@ -17,6 +17,7 @@ import {
 import {
   formatConventionalHeader,
   sliceHunksIntoAtomicCommits,
+  splitAtomicCommit,
 } from './src/utils/atomicEngine';
 import {
   AntigravityPromptEvent,
@@ -116,6 +117,20 @@ async function startServer() {
 
   let appState = loadOrInitializeState();
 
+  // Server-Sent Events (SSE) active subscriber pool
+  const sseClients: express.Response[] = [];
+
+  function broadcastSseEvent(eventName: string, data: unknown): void {
+    const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (let i = sseClients.length - 1; i >= 0; i--) {
+      try {
+        sseClients[i].write(payload);
+      } catch {
+        sseClients.splice(i, 1);
+      }
+    }
+  }
+
   app.get('/api/state', (_req, res) => {
     res.json(appState);
   });
@@ -127,6 +142,7 @@ async function startServer() {
       ...body,
     };
     saveState(appState);
+    broadcastSseEvent('workspace_changed', appState);
     res.json(appState);
   });
 
@@ -135,6 +151,7 @@ async function startServer() {
       fs.unlinkSync(STATE_FILE);
     }
     appState = loadOrInitializeState();
+    broadcastSseEvent('workspace_changed', appState);
     res.json(appState);
   });
 
@@ -229,6 +246,7 @@ async function startServer() {
     }
 
     saveState(appState);
+    broadcastSseEvent('workspace_changed', appState);
     res.json({
       ok: true,
       state: appState,
@@ -271,6 +289,7 @@ async function startServer() {
     appState.stagedAtomicStack = [];
     appState.pushedStack = [...newlyPushed.reverse(), ...appState.pushedStack];
     saveState(appState);
+    broadcastSseEvent('workspace_changed', appState);
 
     res.json({
       ok: true,
@@ -280,8 +299,74 @@ async function startServer() {
     });
   });
 
+  // Universal IDE Daemon Git Split Endpoint
+  app.post('/api/git/split', (req, res) => {
+    const { commit_id, commitId, hunk_id, hunkIdToExtract } = (req.body || {}) as {
+      commit_id?: string;
+      commitId?: string;
+      hunk_id?: string;
+      hunkIdToExtract?: string;
+    };
+    const cId = commitId || commit_id;
+    const hId = hunkIdToExtract || hunk_id;
+    const targetIdx = appState.stagedAtomicStack.findIndex((c) => c.id === cId);
+    if (targetIdx !== -1 && hId) {
+      const splitPair = splitAtomicCommit(
+        appState.stagedAtomicStack[targetIdx],
+        [hId],
+        appState.policy
+      );
+      if (splitPair) {
+        appState.stagedAtomicStack.splice(targetIdx, 1, splitPair[0], splitPair[1]);
+        saveState(appState);
+        broadcastSseEvent('workspace_changed', appState);
+        res.json({ ok: true, commits: splitPair, stack: appState.stagedAtomicStack });
+        return;
+      }
+    }
+    res.json({ ok: true, commits: appState.stagedAtomicStack, stack: appState.stagedAtomicStack });
+  });
+
+  // Universal IDE Daemon Git Rebase Endpoint
+  app.post('/api/git/rebase', (req, res) => {
+    const { ordered_commit_ids, orderedCommitIds } = (req.body || {}) as {
+      ordered_commit_ids?: string[];
+      orderedCommitIds?: string[];
+    };
+    const ids: string[] = orderedCommitIds || ordered_commit_ids || [];
+    if (ids.length > 0) {
+      const idMap = new Map(appState.stagedAtomicStack.map((c) => [c.id, c]));
+      const reordered: AtomicCommitUnit[] = [];
+      for (const id of ids) {
+        const item = idMap.get(id);
+        if (item) {
+          reordered.push(item);
+          idMap.delete(id);
+        }
+      }
+      for (const rem of idMap.values()) {
+        reordered.push(rem);
+      }
+      appState.stagedAtomicStack = reordered;
+      saveState(appState);
+      broadcastSseEvent('workspace_changed', appState);
+    }
+    res.json({ ok: true, commits: appState.stagedAtomicStack });
+  });
+
+  // Universal IDE Daemon LLM Providers Endpoint
+  app.get('/api/llm/providers', (_req, res) => {
+    res.json({
+      providers: [
+        { id: 'gemini-3.8-flash', name: 'Google Gemini 3.8 Flash', isDefault: true, available: true },
+        { id: 'claude-3-7-sonnet', name: 'Anthropic Claude 3.7 Sonnet', isDefault: false, available: true },
+        { id: 'gpt-4o', name: 'OpenAI GPT-4o', isDefault: false, available: true },
+        { id: 'local-deterministic', name: 'Deterministic AST Slicer (Offline)', isDefault: false, available: true },
+      ],
+    });
+  });
+
   // Server-Sent Events (SSE) stream for real-time status updates across IDEs
-  const sseClients: express.Response[] = [];
   app.get('/api/events', (_req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -316,6 +401,7 @@ async function startServer() {
     if (!ai || baseStack.length === 0) {
       appState.stagedAtomicStack = baseStack;
       saveState(appState);
+      broadcastSseEvent('workspace_changed', appState);
       res.json({
         stack: baseStack,
         engine: 'deterministic-ast-slicer',
@@ -380,6 +466,7 @@ async function startServer() {
 
       appState.stagedAtomicStack = refinedStack;
       saveState(appState);
+      broadcastSseEvent('workspace_changed', appState);
       res.json({
         stack: refinedStack,
         engine: 'gemini-3.8-flash',
@@ -389,6 +476,7 @@ async function startServer() {
       console.warn('Gemini refinement fallback used:', err);
       appState.stagedAtomicStack = baseStack;
       saveState(appState);
+      broadcastSseEvent('workspace_changed', appState);
       res.json({
         stack: baseStack,
         engine: 'deterministic-ast-slicer',

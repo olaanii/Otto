@@ -43,7 +43,7 @@ class DaemonRestDataSource implements IDaemonRestDataSource {
   @override
   Future<Map<String, dynamic>> getWorkspaceState() async {
     final response = await apiClient.get<Map<String, dynamic>>(
-      ApiEndpoints.workspaceState,
+      ApiEndpoints.state,
     );
     return response.data ?? {};
   }
@@ -51,7 +51,7 @@ class DaemonRestDataSource implements IDaemonRestDataSource {
   @override
   Future<String> getRawDiff() async {
     final response = await apiClient.get<dynamic>(
-      ApiEndpoints.rawDiff,
+      ApiEndpoints.analyzeDiff,
     );
     if (response.data is String) {
       return response.data as String;
@@ -101,7 +101,7 @@ class DaemonRestDataSource implements IDaemonRestDataSource {
   @override
   Future<Map<String, dynamic>> rebaseStack(List<String> orderedCommitIds) async {
     final response = await apiClient.post<Map<String, dynamic>>(
-      ApiEndpoints.rebaseStack,
+      ApiEndpoints.rebase,
       data: {'ordered_commit_ids': orderedCommitIds},
     );
     return response.data ?? {};
@@ -125,7 +125,7 @@ class DaemonRestDataSource implements IDaemonRestDataSource {
   Future<List<Map<String, dynamic>>> getLlmProviders() async {
     try {
       final response = await apiClient.get<Map<String, dynamic>>(
-        ApiEndpoints.llmProviders,
+        ApiEndpoints.providers,
       );
       final list = response.data?['providers'] as List<dynamic>? ?? [];
       return list.whereType<Map<String, dynamic>>().toList();
@@ -141,7 +141,7 @@ class DaemonRestDataSource implements IDaemonRestDataSource {
     String? additionalContext,
   }) async {
     final response = await apiClient.post<Map<String, dynamic>>(
-      ApiEndpoints.llmRefineStack,
+      ApiEndpoints.refineStack,
       data: {
         'provider_id': provider.id,
         'additional_context': additionalContext,
