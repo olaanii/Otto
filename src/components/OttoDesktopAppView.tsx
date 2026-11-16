@@ -23,12 +23,16 @@ import {
   extractNavigableHunks,
   formatHunkForClipboard,
   parseUnifiedDiffLines,
+  resolveCommitCiCdStatus,
   resolveCommitRealHunks,
+  scanStackForMergeConflicts,
   searchStackedCommitsAndHunks,
   StackedSearchMatch,
 } from '../utils/atomicEngine';
 import { SyntaxHighlightedDiffViewer } from './SyntaxHighlightedDiffViewer';
+import { RebasePlaygroundView } from './RebasePlaygroundView';
 import {
+  AlertTriangle,
   ArrowUp,
   Check,
   ChevronDown,
@@ -91,6 +95,10 @@ interface OttoDesktopAppViewProps {
   } | null;
   onTriggerHotkeyAction: (actionId: HotkeyActionId) => void;
   onNavigateToLanding: () => void;
+  onReorderStagedStack?: (
+    nextStack: AtomicCommitUnit[],
+    summaryMessage?: string
+  ) => void;
 }
 
 const ALL_IDE_IDS: IdeHostId[] = [
@@ -140,10 +148,13 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
   lastTriggeredShortcut,
   onTriggerHotkeyAction,
   onNavigateToLanding,
+  onReorderStagedStack,
 }) => {
   const [activeAgent, setActiveAgent] = useState<IdeHostId>('claude-code');
   const [showAgentMenu, setShowAgentMenu] = useState(false);
-  const [canvasMode, setCanvasMode] = useState<'sliced' | 'original'>('sliced');
+  const [canvasMode, setCanvasMode] = useState<'sliced' | 'rebase' | 'original'>(
+    'sliced'
+  );
   const [diffLayout, setDiffLayout] = useState<'unified' | 'split'>('unified');
   const [selectedFileFilter, setSelectedFileFilter] = useState<string>('all');
   const [activeHunkCursor, setActiveHunkCursor] = useState<number>(0);
@@ -192,25 +203,29 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
       currentStagedHead &&
       currentStagedHead !== prevHeadIdsRef.current.stagedHead
     ) {
-      setSelectedUnitId(currentStagedHead);
-      setSelectedFileFilter('all');
-      setActiveHunkCursor(0);
-      setCanvasMode('sliced');
+      if (canvasMode !== 'rebase') {
+        setSelectedUnitId(currentStagedHead);
+        setSelectedFileFilter('all');
+        setActiveHunkCursor(0);
+        setCanvasMode('sliced');
+      }
     } else if (
       currentPushedHead &&
       currentPushedHead !== prevHeadIdsRef.current.pushedHead
     ) {
-      setSelectedUnitId(currentPushedHead);
-      setSelectedFileFilter('all');
-      setActiveHunkCursor(0);
-      setCanvasMode('sliced');
+      if (canvasMode !== 'rebase') {
+        setSelectedUnitId(currentPushedHead);
+        setSelectedFileFilter('all');
+        setActiveHunkCursor(0);
+        setCanvasMode('sliced');
+      }
     }
 
     prevHeadIdsRef.current = {
       stagedHead: currentStagedHead,
       pushedHead: currentPushedHead,
     };
-  }, [stagedAtomicStack, pushedStack]);
+  }, [stagedAtomicStack, pushedStack, canvasMode]);
 
   // Combined list of all units (staged working on + pushed completed)
   const allUnits = useMemo(
@@ -226,6 +241,17 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
   const activeHunks = useMemo(
     () => (activeUnit ? resolveCommitRealHunks(activeUnit) : []),
     [activeUnit]
+  );
+
+  const activeCiCdReport = useMemo(
+    () =>
+      activeUnit ? resolveCommitCiCdStatus(activeUnit, githubConfig) : null,
+    [activeUnit, githubConfig]
+  );
+
+  const activeConflictReport = useMemo(
+    () => scanStackForMergeConflicts(activeUnit, allUnits),
+    [activeUnit, allUnits]
   );
 
   const navigableHunks = useMemo(
@@ -545,6 +571,7 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
           <div className="inline-flex items-center bg-[#E6E3DC] p-0.5 rounded-full border border-black/[0.05] shrink-0">
             <button
               type="button"
+              data-testid="mode-git-diff-btn"
               onClick={() => setCanvasMode('sliced')}
               className={`px-3.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                 canvasMode === 'sliced'
@@ -556,6 +583,22 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
             </button>
             <button
               type="button"
+              data-testid="mode-rebase-playground-btn"
+              onClick={() => setCanvasMode('rebase')}
+              className={`px-3.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                canvasMode === 'rebase'
+                  ? 'bg-white text-[#1D1D1F] shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <span>Rebase Playground</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/15 text-indigo-700 font-mono text-[9.5px] font-bold">
+                {stagedAtomicStack.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              data-testid="mode-working-tree-btn"
               onClick={() => setCanvasMode('original')}
               className={`px-3.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                 canvasMode === 'original'
@@ -717,37 +760,106 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                   <div className="space-y-1.5">
                     {filteredStagedStack.map((slice, idx) => {
                       const isSelected = activeUnit?.id === slice.id;
+                      const ciReport = resolveCommitCiCdStatus(
+                        slice,
+                        githubConfig
+                      );
+                      const sliceConflict = scanStackForMergeConflicts(
+                        slice,
+                        allUnits
+                      );
                       return (
                         <button
                           key={slice.id}
                           type="button"
+                          data-testid={`staged-commit-card-${idx + 1}`}
                           onClick={() => {
                             setSelectedUnitId(slice.id);
                             setSelectedFileFilter('all');
                             setActiveHunkCursor(0);
                             setCanvasMode('sliced');
                           }}
-                          className={`w-full p-2 rounded-2xl flex items-center gap-2.5 text-left transition-all cursor-pointer ${
+                          className={`w-full p-2.5 rounded-2xl flex flex-col gap-2 text-left transition-all cursor-pointer ${
                             isSelected
                               ? 'bg-[#ECEEFE] border-[1.5px] border-[#7B83EB] shadow-2xs'
-                              : 'hover:bg-black/[0.03] border-[1.5px] border-transparent'
+                              : 'bg-white/55 hover:bg-white/90 border-[1.5px] border-black/[0.04]'
                           }`}
                         >
-                          {/* Mini Thumbnail Preview Card with Status Badge */}
-                          <div className="w-11 h-9 rounded-lg bg-[#E4E2DC] border border-black/[0.06] shrink-0 relative flex items-center justify-center overflow-hidden">
-                            <div className="w-6 h-7 rounded-xs bg-[#1E2028] p-1 flex flex-col gap-0.5">
-                              <span className="h-0.5 w-full bg-emerald-400/80 rounded-full" />
-                              <span className="h-0.5 w-3/4 bg-indigo-300/70 rounded-full" />
-                              <span className="h-0.5 w-full bg-white/40 rounded-full" />
+                          <div className="flex items-center gap-2.5 w-full">
+                            {/* Mini Thumbnail Preview Card with Status Badge */}
+                            <div className="w-11 h-9 rounded-lg bg-[#E4E2DC] border border-black/[0.06] shrink-0 relative flex items-center justify-center overflow-hidden">
+                              <div className="w-6 h-7 rounded-xs bg-[#1E2028] p-1 flex flex-col gap-0.5">
+                                <span className="h-0.5 w-full bg-emerald-400/80 rounded-full" />
+                                <span className="h-0.5 w-3/4 bg-indigo-300/70 rounded-full" />
+                                <span className="h-0.5 w-full bg-white/40 rounded-full" />
+                              </div>
+                              <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white border border-black/10 flex items-center justify-center shadow-2xs">
+                                <GitCommit className="w-2.5 h-2.5 text-indigo-600" />
+                              </span>
                             </div>
-                            <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white border border-black/10 flex items-center justify-center shadow-2xs">
-                              <GitCommit className="w-2.5 h-2.5 text-indigo-600" />
-                            </span>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[12px] font-medium text-[#1D1D1F] leading-snug line-clamp-2">
+                                {slice.scope} · Slice {idx + 1} · {slice.title}
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[12px] font-medium text-[#1D1D1F] leading-snug line-clamp-2">
-                              {slice.scope} · Slice {idx + 1} · {slice.title}
+                          {/* CI/CD Visual Progress Bar & Timeline Indicator per Atomic Commit */}
+                          <div
+                            data-testid="commit-cicd-progress-bar"
+                            data-cicd-status={ciReport.status}
+                            className="w-full pt-1.5 border-t border-black/[0.05] space-y-1"
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider text-[9px] ${
+                                    ciReport.status === 'passing'
+                                      ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/30'
+                                      : ciReport.status === 'failing'
+                                      ? 'bg-rose-500/15 text-rose-800 border border-rose-500/30'
+                                      : 'bg-amber-500/15 text-amber-800 border border-amber-500/30'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      ciReport.status === 'passing'
+                                        ? 'bg-emerald-500'
+                                        : ciReport.status === 'failing'
+                                        ? 'bg-rose-500'
+                                        : 'bg-amber-500 animate-pulse'
+                                    }`}
+                                  />
+                                  CI: {ciReport.statusLabel}
+                                </span>
+                                {sliceConflict.hasConflicts && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-600 text-white font-semibold text-[9px]">
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                    Conflict
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-zinc-500 tabular-nums shrink-0">
+                                {ciReport.progressPercent}%
+                              </span>
+                            </div>
+
+                            {/* 4-Stage Visual CI/CD Pipeline Timeline Progress Bar */}
+                            <div className="grid grid-cols-4 gap-1 w-full">
+                              {ciReport.steps.map((step) => (
+                                <div
+                                  key={step.id}
+                                  title={`${step.label}: ${step.status}`}
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    step.status === 'passing'
+                                      ? 'bg-emerald-500'
+                                      : step.status === 'failing'
+                                      ? 'bg-rose-500'
+                                      : 'bg-amber-400 animate-pulse'
+                                  }`}
+                                />
+                              ))}
                             </div>
                           </div>
                         </button>
@@ -778,6 +890,7 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                 <div className="space-y-1.5">
                   {visibleCompleted.map((pr, idx) => {
                     const isSelected = activeUnit?.id === pr.id;
+                    const ciReport = resolveCommitCiCdStatus(pr, githubConfig);
                     return (
                       <button
                         key={pr.id}
@@ -788,26 +901,76 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                           setActiveHunkCursor(0);
                           setCanvasMode('sliced');
                         }}
-                        className={`w-full p-2 rounded-2xl flex items-center gap-2.5 text-left transition-all cursor-pointer ${
+                        className={`w-full p-2.5 rounded-2xl flex flex-col gap-2 text-left transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-[#ECEEFE] border-[1.5px] border-[#7B83EB] shadow-2xs'
-                            : 'hover:bg-black/[0.03] border-[1.5px] border-transparent'
+                            : 'bg-white/45 hover:bg-white/80 border-[1.5px] border-black/[0.04]'
                         }`}
                       >
-                        {/* Mini Visual Preview Thumbnail with Green Check Badge */}
-                        <div className="w-11 h-9 rounded-lg bg-[#E4E2DC] border border-black/[0.06] shrink-0 relative flex items-center justify-center overflow-hidden">
-                          <div className="w-6 h-7 rounded-xs bg-[#22252E] p-1 flex flex-col justify-center gap-0.5">
-                            <span className="h-1 w-full bg-white/90 rounded-[1px]" />
-                            <span className="h-0.5 w-2/3 bg-emerald-400/80 rounded-full" />
+                        <div className="flex items-center gap-2.5 w-full">
+                          {/* Mini Visual Preview Thumbnail with Green Check Badge */}
+                          <div className="w-11 h-9 rounded-lg bg-[#E4E2DC] border border-black/[0.06] shrink-0 relative flex items-center justify-center overflow-hidden">
+                            <div className="w-6 h-7 rounded-xs bg-[#22252E] p-1 flex flex-col justify-center gap-0.5">
+                              <span className="h-1 w-full bg-white/90 rounded-[1px]" />
+                              <span className="h-0.5 w-2/3 bg-emerald-400/80 rounded-full" />
+                            </div>
+                            <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white border border-black/10 flex items-center justify-center shadow-2xs">
+                              <Check className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
+                            </span>
                           </div>
-                          <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white border border-black/10 flex items-center justify-center shadow-2xs">
-                            <Check className="w-2.5 h-2.5 text-emerald-600 stroke-[2.5]" />
-                          </span>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12px] font-medium text-[#1D1D1F] leading-snug line-clamp-2">
+                              Otto · PR #{pr.prNumber || 141 + idx} · {pr.title}
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[12px] font-medium text-[#1D1D1F] leading-snug line-clamp-2">
-                            Otto · PR #{pr.prNumber || 141 + idx} · {pr.title}
+                        {/* CI/CD Visual Progress Bar & Timeline Indicator per Stacked PR */}
+                        <div
+                          data-testid="commit-cicd-progress-bar"
+                          data-cicd-status={ciReport.status}
+                          className="w-full pt-1.5 border-t border-black/[0.05] space-y-1"
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono">
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider text-[9px] ${
+                                ciReport.status === 'passing'
+                                  ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/30'
+                                  : ciReport.status === 'failing'
+                                  ? 'bg-rose-500/15 text-rose-800 border border-rose-500/30'
+                                  : 'bg-amber-500/15 text-amber-800 border border-amber-500/30'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  ciReport.status === 'passing'
+                                    ? 'bg-emerald-500'
+                                    : ciReport.status === 'failing'
+                                    ? 'bg-rose-500'
+                                    : 'bg-amber-500 animate-pulse'
+                                }`}
+                              />
+                              CI: {ciReport.statusLabel}
+                            </span>
+                            <span className="text-zinc-500 tabular-nums">
+                              {ciReport.progressPercent}% · {ciReport.durationLabel}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-1 w-full">
+                            {ciReport.steps.map((step) => (
+                              <div
+                                key={step.id}
+                                title={`${step.label}: ${step.status}`}
+                                className={`h-1.5 rounded-full ${
+                                  step.status === 'passing'
+                                    ? 'bg-emerald-500'
+                                    : step.status === 'failing'
+                                    ? 'bg-rose-500'
+                                    : 'bg-amber-400'
+                                }`}
+                              />
+                            ))}
                           </div>
                         </div>
                       </button>
@@ -985,6 +1148,144 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                   </div>
                 </div>
 
+                {/* CI/CD Pipeline Timeline Bar for Active Commit (Fetched from mock GitHub Config) */}
+                {activeCiCdReport && (
+                  <div
+                    data-testid="active-commit-cicd-timeline"
+                    data-cicd-status={activeCiCdReport.status}
+                    className="px-4 py-2 bg-[#171A23] border-b border-white/[0.07] flex flex-wrap items-center justify-between gap-3 shrink-0 font-mono text-[11px]"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider shrink-0 ${
+                          activeCiCdReport.status === 'passing'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                            : activeCiCdReport.status === 'failing'
+                            ? 'bg-rose-500/25 text-rose-200 border border-rose-400/40'
+                            : 'bg-amber-500/20 text-amber-200 border border-amber-400/30'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            activeCiCdReport.status === 'passing'
+                              ? 'bg-emerald-400'
+                              : activeCiCdReport.status === 'failing'
+                              ? 'bg-rose-400'
+                              : 'bg-amber-400 animate-pulse'
+                          }`}
+                        />
+                        CI/CD: {activeCiCdReport.statusLabel}
+                      </span>
+                      <span className="text-zinc-300 truncate">
+                        {activeCiCdReport.workflowName}
+                      </span>
+                      <span className="text-zinc-500 hidden lg:inline">·</span>
+                      <span className="text-zinc-400 truncate hidden lg:inline">
+                        {activeCiCdReport.checksSummary}
+                      </span>
+                    </div>
+
+                    {/* 4-Step Visual Pipeline Timeline Indicator */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        {activeCiCdReport.steps.map((step, sIdx) => (
+                          <div
+                            key={step.id}
+                            className="flex items-center gap-1"
+                          >
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${
+                                step.status === 'passing'
+                                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                  : step.status === 'failing'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                  : 'bg-amber-500/15 text-amber-200 border border-amber-500/30'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  step.status === 'passing'
+                                    ? 'bg-emerald-400'
+                                    : step.status === 'failing'
+                                    ? 'bg-rose-400'
+                                    : 'bg-amber-400 animate-pulse'
+                                }`}
+                              />
+                              {step.label}
+                            </span>
+                            {sIdx < activeCiCdReport.steps.length - 1 && (
+                              <span className="text-zinc-600 text-[10px]">→</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <span className="text-zinc-400 tabular-nums text-[10px]">
+                        {activeCiCdReport.progressPercent}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Proactive Stack Merge Conflict Alert System (Before User Hits 'Push') */}
+                {activeConflictReport.hasConflicts && (
+                  <div
+                    role="alert"
+                    data-testid="proactive-merge-conflict-alert"
+                    className="px-4 py-2.5 bg-rose-950/75 border-b border-rose-500/50 flex flex-wrap items-center justify-between gap-2.5 shrink-0 font-mono text-xs text-rose-100"
+                  >
+                    <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/30 border border-rose-400/60 text-rose-200 text-[10px] font-bold uppercase tracking-wider shrink-0">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-300 shrink-0" />
+                        Merge Conflict Risk
+                      </span>
+                      <div className="min-w-0 flex-1 text-[11px] leading-snug">
+                        <span className="font-semibold text-rose-200">
+                          {activeConflictReport.conflictingFilePaths.length}{' '}
+                          conflicting{' '}
+                          {activeConflictReport.conflictingFilePaths.length === 1
+                            ? 'file'
+                            : 'files'}{' '}
+                          detected across pending stack before Push:
+                        </span>{' '}
+                        {activeConflictReport.conflicts.map((c, cIdx) => (
+                          <span key={`${c.filePath}-${c.conflictingCommitId}-${cIdx}`}>
+                            <span
+                              data-testid="proactive-conflict-file-pill"
+                              className="inline-flex items-center px-1.5 py-0.5 mx-1 rounded bg-rose-600/40 border border-rose-400/60 text-rose-100 font-semibold text-[10.5px]"
+                            >
+                              {c.filePath}
+                            </span>
+                            <span className="text-rose-200/90">
+                              ({c.overlapLineRange} with{' '}
+                              <strong className="text-white">
+                                {c.conflictingBranchName}
+                              </strong>
+                              )
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {activeConflictReport.conflicts[0] && (
+                      <button
+                        type="button"
+                        data-testid="inspect-conflicting-commit-btn"
+                        onClick={() => {
+                          const targetConflict = activeConflictReport.conflicts[0];
+                          setSelectedUnitId(targetConflict.conflictingCommitId);
+                          setSelectedFileFilter(targetConflict.filePath);
+                          setActiveHunkCursor(0);
+                          setCanvasMode('sliced');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-[11px] whitespace-nowrap transition-colors cursor-pointer shrink-0 shadow-xs"
+                      >
+                        Inspect Conflicting Commit →
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Hunk Navigation Arrows, Copy Hunk & File Hunk Selector Bar */}
                 <div className="px-4 py-2 bg-[#161922] border-b border-white/[0.07] flex flex-wrap items-center justify-between gap-2 shrink-0 font-mono text-[11px]">
                   {/* Left: Hunk Cycling Navigation Arrows + All Hunks + Copy Hunk */}
@@ -1068,7 +1369,7 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Right: File Tabs inside the Atomic Commit */}
+                  {/* Right: File Tabs inside the Atomic Commit (Conflicting Files Highlighted in Red) */}
                   <div className="flex items-center gap-1.5 overflow-x-auto">
                     {activeHunks.map((hunk) => {
                       const isFileActive =
@@ -1076,10 +1377,20 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                         (selectedFileFilter === 'all' &&
                           !showAllCommitHunks &&
                           currentNavigableHunk?.filePath === hunk.filePath);
+                      const fileConflicts =
+                        activeConflictReport.conflictsByFile[hunk.filePath] || [];
+                      const isConflictingFile = fileConflicts.length > 0;
+
                       return (
                         <button
                           key={hunk.id}
                           type="button"
+                          data-testid={
+                            isConflictingFile
+                              ? 'conflicting-file-tab'
+                              : 'clean-file-tab'
+                          }
+                          data-conflict={isConflictingFile ? 'true' : 'false'}
                           onClick={() => {
                             const firstMatchingIdx = navigableHunks.findIndex(
                               (nh) => nh.filePath === hunk.filePath
@@ -1094,12 +1405,28 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                             );
                           }}
                           className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md whitespace-nowrap transition-colors cursor-pointer ${
-                            isFileActive
+                            isConflictingFile
+                              ? 'bg-rose-500/25 text-rose-200 border border-rose-500/70 ring-1 ring-rose-500/40 font-semibold'
+                              : isFileActive
                               ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 font-semibold'
                               : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]'
                           }`}
                         >
-                          <span>{hunk.filePath}</span>
+                          {isConflictingFile && (
+                            <AlertTriangle className="w-3 h-3 text-rose-300 shrink-0" />
+                          )}
+                          <span
+                            className={
+                              isConflictingFile ? 'text-rose-200 font-bold' : ''
+                            }
+                          >
+                            {hunk.filePath}
+                          </span>
+                          {isConflictingFile && (
+                            <span className="px-1 py-0.2 rounded bg-rose-600 text-white text-[9px] font-bold uppercase">
+                              Conflict
+                            </span>
+                          )}
                           <span className="text-emerald-400 text-[10px]">
                             +{hunk.additions}
                           </span>
@@ -1122,6 +1449,9 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                       totalHunksInCommit={navigableHunks.length}
                       isFocusedHunk={currentNavigableHunk?.id === navHunk.id}
                       diffLayout={diffLayout}
+                      fileConflicts={
+                        activeConflictReport.conflictsByFile[navHunk.filePath]
+                      }
                       canExtractHunk={
                         activeHunks.length > 1 && activeUnit.status === 'staged'
                       }
@@ -1142,6 +1472,24 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                   ))}
                 </div>
               </div>
+            ) : canvasMode === 'rebase' ? (
+              <RebasePlaygroundView
+                pendingStack={stagedAtomicStack}
+                allUnits={allUnits}
+                policy={policy}
+                githubConfig={githubConfig}
+                selectedUnitId={activeUnit?.id || null}
+                onSelectUnit={(commitId) => {
+                  setSelectedUnitId(commitId);
+                  setSelectedFileFilter('all');
+                  setActiveHunkCursor(0);
+                }}
+                onReorderPendingStack={(nextStack, summaryMessage) => {
+                  prevHeadIdsRef.current.stagedHead = nextStack[0]?.id;
+                  onReorderStagedStack?.(nextStack, summaryMessage);
+                }}
+                onReturnToGitDiff={() => setCanvasMode('sliced')}
+              />
             ) : (
               /* "Working Tree" Un-sliced Working Tree Diff View */
               <div className="w-full max-w-[960px] mx-auto flex-1 flex flex-col min-h-0 rounded-2xl bg-[#14161C] text-zinc-200 shadow-xl border border-black/20 overflow-hidden font-mono text-xs">
@@ -1337,6 +1685,28 @@ export const OttoDesktopAppView: React.FC<OttoDesktopAppViewProps> = ({
                   </div>
                   <span className="w-5 h-5 rounded-md bg-zinc-200/80 flex items-center justify-center font-mono text-[10px] text-zinc-600 shrink-0">
                     ±
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCanvasMode('rebase')}
+                  className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${
+                    canvasMode === 'rebase'
+                      ? 'bg-[#E6E3DC]/90'
+                      : 'hover:bg-black/[0.04]'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-[#1D1D1F] truncate">
+                      Rebase Playground
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      Drag & drop {stagedAtomicStack.length} pending slices + DAG
+                    </div>
+                  </div>
+                  <span className="w-5 h-5 rounded-md bg-indigo-500/15 flex items-center justify-center font-mono text-[10px] font-bold text-indigo-700 shrink-0">
+                    ⇄
                   </span>
                 </button>
               </div>

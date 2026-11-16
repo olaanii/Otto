@@ -554,6 +554,19 @@ export default function App() {
     );
   };
 
+  const handleReorderStagedStack = (
+    nextStagedStack: AtomicCommitUnit[],
+    summaryMessage?: string
+  ) => {
+    persistWorkspace({
+      ...workspace,
+      stagedAtomicStack: nextStagedStack,
+    });
+    if (summaryMessage) {
+      showTransientNotice(summaryMessage);
+    }
+  };
+
   const handleInjectNotesCapture = (payload: {
     promptText: string;
     rawFilesInput: string;
@@ -828,6 +841,7 @@ export default function App() {
         onPushSingleCommit={handlePushSingleCommit}
         onPushAllStaged={handlePushAllStaged}
         onSplitCommit={handleSplitCommit}
+        onReorderStagedStack={handleReorderStagedStack}
         onMergeTopPr={handleMergeTopPr}
         onPromoteDraftPr={handlePromoteDraftPr}
         onChangeBaseBranch={handleChangeBaseBranch}

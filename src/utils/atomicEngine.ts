@@ -3,6 +3,7 @@ import {
   CommitType,
   DailyCadenceDay,
   DiffHunk,
+  GitHubConnectionConfig,
   GuardrailPolicy,
   IdeHostId,
 } from '../types/git';
@@ -1385,4 +1386,510 @@ export function summarizeThirtyDayCadence(days: DailyCadenceDay[]): {
     peakDayCommits,
   };
 }
+
+export type CiCdStatusState = 'passing' | 'pending' | 'failing';
+
+export interface CiCdPipelineStep {
+  id: string;
+  label: string;
+  status: CiCdStatusState;
+}
+
+export interface CommitCiCdStatusReport {
+  commitId: string;
+  status: CiCdStatusState;
+  statusLabel: 'passing' | 'pending' | 'failing';
+  progressPercent: number;
+  workflowName: string;
+  checksSummary: string;
+  durationLabel: string;
+  steps: CiCdPipelineStep[];
+}
+
+export function resolveCommitCiCdStatus(
+  unit: AtomicCommitUnit,
+  githubConfig: GitHubConnectionConfig
+): CommitCiCdStatusReport {
+  const repoSlug = `${githubConfig.owner}/${githubConfig.repo}`;
+  const workflowName = `${repoSlug} · GitHub Actions CI`;
+
+  if (!githubConfig.connected) {
+    return {
+      commitId: unit.id,
+      status: 'pending',
+      statusLabel: 'pending',
+      progressPercent: 25,
+      workflowName,
+      checksSummary: '1/4 queued (awaiting GitHub sync)',
+      durationLabel: 'queued',
+      steps: [
+        { id: 'ast', label: 'AST Guard', status: 'passing' },
+        { id: 'typecheck', label: 'Typecheck', status: 'pending' },
+        { id: 'tests', label: 'Unit Specs', status: 'pending' },
+        { id: 'gh', label: 'GitHub CI', status: 'pending' },
+      ],
+    };
+  }
+
+  const hunks = resolveCommitRealHunks(unit);
+  const touchedFiles = hunks.map((h) => h.filePath.toLowerCase()).join(' ');
+  const lowerHeader = (unit.conventionalHeader || unit.title).toLowerCase();
+
+  const hasPolicyViolations =
+    Array.isArray(unit.violations) && unit.violations.length > 0;
+  const isFailingCandidate =
+    hasPolicyViolations ||
+    touchedFiles.includes('retryqueue.ts') ||
+    lowerHeader.includes('dead-letter');
+
+  if (isFailingCandidate && unit.status !== 'merged') {
+    return {
+      commitId: unit.id,
+      status: 'failing',
+      statusLabel: 'failing',
+      progressPercent: 50,
+      workflowName,
+      checksSummary: '2/4 checks · 1 failing (DLQ contract overlap)',
+      durationLabel: '41s',
+      steps: [
+        { id: 'ast', label: 'AST Guard', status: 'passing' },
+        { id: 'typecheck', label: 'Typecheck', status: 'passing' },
+        { id: 'tests', label: 'Unit Specs', status: 'failing' },
+        { id: 'gh', label: 'GitHub CI', status: 'failing' },
+      ],
+    };
+  }
+
+  const isPendingCandidate =
+    unit.status === 'draft' ||
+    touchedFiles.includes('webhookhandler.ts') ||
+    touchedFiles.includes('tokenrefresh.ts');
+
+  if (isPendingCandidate && unit.status !== 'merged' && unit.status !== 'pr_open') {
+    return {
+      commitId: unit.id,
+      status: 'pending',
+      statusLabel: 'pending',
+      progressPercent: 68,
+      workflowName,
+      checksSummary: '2/4 passed · running Unit Specs on ' + githubConfig.defaultBranch,
+      durationLabel: '19s…',
+      steps: [
+        { id: 'ast', label: 'AST Guard', status: 'passing' },
+        { id: 'typecheck', label: 'Typecheck', status: 'passing' },
+        { id: 'tests', label: 'Unit Specs', status: 'pending' },
+        { id: 'gh', label: 'GitHub CI', status: 'pending' },
+      ],
+    };
+  }
+
+  return {
+    commitId: unit.id,
+    status: 'passing',
+    statusLabel: 'passing',
+    progressPercent: 100,
+    workflowName,
+    checksSummary: '4/4 checks passing (' + githubConfig.mode.replace(/_/g, ' ') + ')',
+    durationLabel: '34s',
+    steps: [
+      { id: 'ast', label: 'AST Guard', status: 'passing' },
+      { id: 'typecheck', label: 'Typecheck', status: 'passing' },
+      { id: 'tests', label: 'Unit Specs', status: 'passing' },
+      { id: 'gh', label: 'GitHub CI', status: 'passing' },
+    ],
+  };
+}
+
+export interface FileMergeConflictDetail {
+  filePath: string;
+  conflictingCommitId: string;
+  conflictingCommitSha: string;
+  conflictingCommitHeader: string;
+  conflictingBranchName: string;
+  overlapLineRange: string;
+  overlappingSymbols: string[];
+  conflictReason: string;
+  severity: 'high' | 'medium';
+}
+
+export interface StackMergeConflictReport {
+  targetCommitId: string;
+  hasConflicts: boolean;
+  conflictingFilePaths: string[];
+  conflicts: FileMergeConflictDetail[];
+  conflictsByFile: Record<string, FileMergeConflictDetail[]>;
+}
+
+function parseDiffLineSpan(diffSnippet: string): { start: number; end: number } {
+  const match = (diffSnippet || '').match(/@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@/);
+  if (!match) {
+    return { start: 1, end: 25 };
+  }
+  const newStart = parseInt(match[3], 10) || 1;
+  const newSpan = parseInt(match[4] || '18', 10) || 18;
+  return { start: newStart, end: newStart + Math.max(1, newSpan) - 1 };
+}
+
+function extractModifiedIdentifiers(diffSnippet: string): string[] {
+  const identifiers = new Set<string>();
+  const lines = (diffSnippet || '').split('\n');
+  for (const line of lines) {
+    if (!line.startsWith('+') && !line.startsWith('-')) continue;
+    const matches = line.match(
+      /\b(?:interface|type|function|const|table|index)\s+([A-Za-z0-9_]+)/g
+    );
+    if (matches) {
+      for (const m of matches) {
+        const parts = m.trim().split(/\s+/);
+        const token = parts[parts.length - 1];
+        if (token && token.length >= 3) {
+          identifiers.add(token);
+        }
+      }
+    }
+  }
+  return Array.from(identifiers);
+}
+
+export function scanStackForMergeConflicts(
+  targetUnit: AtomicCommitUnit | null,
+  allPendingUnits: AtomicCommitUnit[]
+): StackMergeConflictReport {
+  if (!targetUnit) {
+    return {
+      targetCommitId: '',
+      hasConflicts: false,
+      conflictingFilePaths: [],
+      conflicts: [],
+      conflictsByFile: {},
+    };
+  }
+
+  const targetHunks = resolveCommitRealHunks(targetUnit);
+  const otherPending = allPendingUnits.filter(
+    (u) => u.id !== targetUnit.id && u.status !== 'merged'
+  );
+
+  const conflicts: FileMergeConflictDetail[] = [];
+  const conflictsByFile: Record<string, FileMergeConflictDetail[]> = {};
+  const conflictingFileSet = new Set<string>();
+
+  for (const myHunk of targetHunks) {
+    const myPath = myHunk.filePath.trim();
+    const mySpan = parseDiffLineSpan(myHunk.diffSnippet);
+    const mySymbols = extractModifiedIdentifiers(myHunk.diffSnippet);
+
+    for (const otherUnit of otherPending) {
+      const otherHunks = resolveCommitRealHunks(otherUnit);
+      for (const theirHunk of otherHunks) {
+        if (theirHunk.filePath.trim() !== myPath) continue;
+
+        const theirSpan = parseDiffLineSpan(theirHunk.diffSnippet);
+        const rangesOverlap =
+          mySpan.start <= theirSpan.end && theirSpan.start <= mySpan.end;
+        const theirSymbols = extractModifiedIdentifiers(theirHunk.diffSnippet);
+        const sharedSymbols = mySymbols.filter((s) => theirSymbols.includes(s));
+
+        const overlapLineRange = `Lines ${mySpan.start}–${mySpan.end} vs Lines ${theirSpan.start}–${theirSpan.end}`;
+        const symbolNote =
+          sharedSymbols.length > 0
+            ? ` on symbol${sharedSymbols.length > 1 ? 's' : ''} \`${sharedSymbols.join(', ')}\``
+            : '';
+
+        const detail: FileMergeConflictDetail = {
+          filePath: myPath,
+          conflictingCommitId: otherUnit.id,
+          conflictingCommitSha: otherUnit.sha || 'pending',
+          conflictingCommitHeader: otherUnit.conventionalHeader,
+          conflictingBranchName: otherUnit.branchName,
+          overlapLineRange,
+          overlappingSymbols: sharedSymbols,
+          conflictReason: rangesOverlap
+            ? `Overlapping hunk range (${overlapLineRange})${symbolNote} with pending commit ${otherUnit.branchName}`
+            : `Concurrent modification of ${myPath} (${overlapLineRange}) in pending commit ${otherUnit.branchName}`,
+          severity: rangesOverlap ? 'high' : 'medium',
+        };
+
+        conflicts.push(detail);
+        conflictingFileSet.add(myPath);
+        if (!conflictsByFile[myPath]) {
+          conflictsByFile[myPath] = [];
+        }
+        conflictsByFile[myPath].push(detail);
+      }
+    }
+  }
+
+  return {
+    targetCommitId: targetUnit.id,
+    hasConflicts: conflicts.length > 0,
+    conflictingFilePaths: Array.from(conflictingFileSet),
+    conflicts,
+    conflictsByFile,
+  };
+}
+
+export function recomputeStackBranchChain(
+  units: AtomicCommitUnit[],
+  policy: GuardrailPolicy
+): AtomicCommitUnit[] {
+  const baseBranch = policy.baseBranch || 'main';
+  let previousCodeBranch = baseBranch;
+
+  return units.map((unit, idx) => {
+    const resolvedHunks = resolveCommitRealHunks(unit);
+    const isPlanCommit =
+      policy.isolateBrainstormingDocs &&
+      (unit.type === 'docs' || resolvedHunks.every((h) => h.isBrainstormOrPlan));
+
+    const parentBranch = isPlanCommit ? baseBranch : previousCodeBranch;
+    if (!isPlanCommit) {
+      previousCodeBranch = unit.branchName;
+    }
+
+    const rebasedSha = generateDeterministicShortSha(
+      `${unit.id}-${unit.conventionalHeader}-pos${idx}-${parentBranch}`
+    );
+
+    return {
+      ...unit,
+      parentBranch,
+      sha: rebasedSha,
+      hunks: resolvedHunks,
+    };
+  });
+}
+
+export function rebaseAndReorderPendingStack(
+  pendingStack: AtomicCommitUnit[],
+  sourceIndex: number,
+  destinationIndex: number,
+  policy: GuardrailPolicy
+): AtomicCommitUnit[] {
+  if (
+    !Array.isArray(pendingStack) ||
+    pendingStack.length <= 1 ||
+    sourceIndex < 0 ||
+    sourceIndex >= pendingStack.length
+  ) {
+    return pendingStack;
+  }
+
+  const clampedDest = Math.max(
+    0,
+    Math.min(destinationIndex, pendingStack.length - 1)
+  );
+  if (sourceIndex === clampedDest) {
+    return recomputeStackBranchChain(pendingStack, policy);
+  }
+
+  const next = [...pendingStack];
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(clampedDest, 0, moved);
+
+  return recomputeStackBranchChain(next, policy);
+}
+
+export function sortStackBySemanticOrder(
+  pendingStack: AtomicCommitUnit[],
+  policy: GuardrailPolicy
+): AtomicCommitUnit[] {
+  const sorted = [...pendingStack].sort((a, b) => {
+    const weightDiff = COMMIT_ORDER_WEIGHT[a.type] - COMMIT_ORDER_WEIGHT[b.type];
+    if (weightDiff !== 0) return weightDiff;
+    return a.scope.localeCompare(b.scope);
+  });
+  return recomputeStackBranchChain(sorted, policy);
+}
+
+export interface DependencyGraphNode {
+  id: string;
+  commitId: string;
+  stackPosition: number;
+  sha: string;
+  type: CommitType;
+  scope: string;
+  title: string;
+  conventionalHeader: string;
+  branchName: string;
+  parentBranch: string;
+  totalLoc: number;
+  filesTouched: string[];
+  isIsolatedFromChain: boolean;
+  orderWarning: string | null;
+}
+
+export interface DependencyGraphEdge {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  fromLabel: string;
+  toLabel: string;
+  kind: 'branch_parent' | 'file_coupling' | 'order_violation';
+  detailLabel: string;
+}
+
+export interface StackDependencyGraph {
+  baseBranch: string;
+  nodes: DependencyGraphNode[];
+  edges: DependencyGraphEdge[];
+  orderWarningsCount: number;
+  sharedFileCouplingsCount: number;
+  rebaseTodoScript: string;
+}
+
+export function buildStackDependencyGraph(
+  pendingStack: AtomicCommitUnit[],
+  baseBranch = 'main'
+): StackDependencyGraph {
+  const nodes: DependencyGraphNode[] = [];
+  const edges: DependencyGraphEdge[] = [];
+  let orderWarningsCount = 0;
+  let sharedFileCouplingsCount = 0;
+
+  const branchToNodeId = new Map<string, string>();
+  branchToNodeId.set(baseBranch, `base::${baseBranch}`);
+
+  pendingStack.forEach((unit, idx) => {
+    const hunks = resolveCommitRealHunks(unit);
+    const filesTouched = Array.from(new Set(hunks.map((h) => h.filePath)));
+    const isIsolatedFromChain =
+      unit.parentBranch === baseBranch && idx > 0 && unit.type === 'docs';
+
+    // Check semantic ordering warnings relative to commits that appear LATER in the rebased stack
+    let orderWarning: string | null = null;
+    for (let laterIdx = idx + 1; laterIdx < pendingStack.length; laterIdx++) {
+      const laterUnit = pendingStack[laterIdx];
+      const laterHunks = resolveCommitRealHunks(laterUnit);
+      const laterFiles = new Set(laterHunks.map((h) => h.filePath));
+      const sharedFile = filesTouched.find((f) => laterFiles.has(f));
+
+      if (
+        unit.type === 'test' &&
+        (laterUnit.type === 'feat' ||
+          laterUnit.type === 'fix' ||
+          laterUnit.type === 'refactor')
+      ) {
+        orderWarning = `Test slice (${unit.branchName}) is queued before ${laterUnit.type}(${laterUnit.scope}) (${laterUnit.branchName})`;
+        break;
+      }
+
+      if (
+        sharedFile &&
+        COMMIT_ORDER_WEIGHT[unit.type] > COMMIT_ORDER_WEIGHT[laterUnit.type]
+      ) {
+        orderWarning = `${unit.type}(${unit.scope}) touches ${sharedFile} before foundational ${laterUnit.type}(${laterUnit.scope})`;
+        break;
+      }
+
+      if (
+        unit.type !== 'docs' &&
+        laterUnit.type !== 'docs' &&
+        COMMIT_ORDER_WEIGHT[unit.type] > COMMIT_ORDER_WEIGHT[laterUnit.type]
+      ) {
+        orderWarning = sharedFile
+          ? `${unit.type}(${unit.scope}) touches ${sharedFile} before foundational ${laterUnit.type}(${laterUnit.scope})`
+          : `${unit.type}(${unit.scope}) is queued before foundational ${laterUnit.type}(${laterUnit.scope}) (${laterUnit.branchName})`;
+        break;
+      }
+    }
+
+    if (orderWarning) {
+      orderWarningsCount += 1;
+    }
+
+    const nodeId = unit.id;
+    branchToNodeId.set(unit.branchName, nodeId);
+
+    nodes.push({
+      id: nodeId,
+      commitId: unit.id,
+      stackPosition: idx + 1,
+      sha: unit.sha || 'pending',
+      type: unit.type,
+      scope: unit.scope,
+      title: unit.title,
+      conventionalHeader: unit.conventionalHeader,
+      branchName: unit.branchName,
+      parentBranch: unit.parentBranch || baseBranch,
+      totalLoc: unit.totalLoc,
+      filesTouched,
+      isIsolatedFromChain,
+      orderWarning,
+    });
+  });
+
+  // Build parent-child Git branch edges + cross-slice file coupling & semantic order violation edges
+  nodes.forEach((node, idx) => {
+    const parentNodeId =
+      branchToNodeId.get(node.parentBranch) || `base::${baseBranch}`;
+    edges.push({
+      id: `edge-parent-${node.id}`,
+      fromNodeId: parentNodeId,
+      toNodeId: node.id,
+      fromLabel: node.parentBranch,
+      toLabel: node.branchName,
+      kind: 'branch_parent',
+      detailLabel: `${node.branchName} rebases onto ${node.parentBranch}`,
+    });
+
+    // Check file couplings or semantic order inversions with earlier nodes in the stack
+    for (let prevIdx = 0; prevIdx < idx; prevIdx++) {
+      const prevNode = nodes[prevIdx];
+      const sharedFiles = node.filesTouched.filter((f) =>
+        prevNode.filesTouched.includes(f)
+      );
+      const isInvertedOrder =
+        prevNode.type !== 'docs' &&
+        node.type !== 'docs' &&
+        COMMIT_ORDER_WEIGHT[prevNode.type] > COMMIT_ORDER_WEIGHT[node.type];
+
+      if (sharedFiles.length > 0) {
+        sharedFileCouplingsCount += 1;
+        edges.push({
+          id: `edge-file-${prevNode.id}-${node.id}`,
+          fromNodeId: prevNode.id,
+          toNodeId: node.id,
+          fromLabel: prevNode.branchName,
+          toLabel: node.branchName,
+          kind: isInvertedOrder ? 'order_violation' : 'file_coupling',
+          detailLabel: `Shared file ${sharedFiles.join(', ')}${
+            isInvertedOrder
+              ? ` (${prevNode.type} precedes ${node.type})`
+              : ''
+          }`,
+        });
+      } else if (isInvertedOrder) {
+        edges.push({
+          id: `edge-order-${prevNode.id}-${node.id}`,
+          fromNodeId: prevNode.id,
+          toNodeId: node.id,
+          fromLabel: prevNode.branchName,
+          toLabel: node.branchName,
+          kind: 'order_violation',
+          detailLabel: `Semantic inversion: ${prevNode.type}(${prevNode.scope}) precedes ${node.type}(${node.scope})`,
+        });
+      }
+    }
+  });
+
+  const rebaseTodoLines = [
+    `# Interactive Rebase Plan onto ${baseBranch} (${nodes.length} atomic slices)`,
+    ...nodes.map(
+      (n) =>
+        `pick ${n.sha} ${n.conventionalHeader} # ${n.parentBranch} <- ${n.branchName}`
+    ),
+  ];
+
+  return {
+    baseBranch,
+    nodes,
+    edges,
+    orderWarningsCount,
+    sharedFileCouplingsCount,
+    rebaseTodoScript: rebaseTodoLines.join('\n'),
+  };
+}
+
+
 

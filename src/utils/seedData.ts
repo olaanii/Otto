@@ -265,8 +265,8 @@ export const INITIAL_WORKING_TREE_HUNKS: DiffHunk[] = [
     moduleScope: 'payment',
     intent: 'feat',
     summary: 'Add exponential backoff dead-letter queue for transient webhook failures',
-    additions: 64,
-    deletions: 12,
+    additions: 44,
+    deletions: 8,
     promptContext: 'Claude Code CLI: Add dead-letter retry scheduler with jittered backoff',
     sourceAgent: 'claude-code',
     isBrainstormOrPlan: false,
@@ -286,6 +286,32 @@ export const INITIAL_WORKING_TREE_HUNKS: DiffHunk[] = [
 +  const deterministicJitter = (cappedAttempt * 313) % 450;
 +  return exponential + deterministicJitter;
  }`,
+  },
+  {
+    id: 'hunk-103b',
+    filePath: 'src/types/payment.ts',
+    moduleScope: 'payment',
+    intent: 'feat',
+    summary: 'Extend WebhookEventType union with dead-letter exhaustion event contracts',
+    additions: 20,
+    deletions: 4,
+    promptContext: 'Claude Code CLI: Add dead-letter retry scheduler with jittered backoff',
+    sourceAgent: 'claude-code',
+    isBrainstormOrPlan: false,
+    diffSnippet: `@@ -1,12 +1,22 @@
+ export type WebhookEventType =
+   | 'charge.succeeded'
+   | 'charge.failed'
++  | 'charge.dlq_exhausted'
++  | 'payout.dlq_requeued'
+   | 'subscription.updated';
+ 
++export interface DeadLetterWebhookEnvelope {
++  readonly eventId: string;
++  readonly eventType: WebhookEventType;
++  readonly maxRetriesReached: boolean;
++  readonly deadLetteredAtIso: string;
++}`,
   },
   {
     id: 'hunk-104',

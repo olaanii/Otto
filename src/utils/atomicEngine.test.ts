@@ -442,7 +442,130 @@ test('formatHunkForClipboard and searchStackedCommitsAndHunks format diff patche
   assert.deepEqual(searchStackedCommitsAndHunks(allUnits, '   '), []);
 });
 
+test('resolveCommitCiCdStatus and scanStackForMergeConflicts compute CI/CD states and detect overlapping files across pending commits', async () => {
+  const {
+    resolveCommitCiCdStatus,
+    scanStackForMergeConflicts,
+  } = await import('./atomicEngine');
+  const {
+    INITIAL_GITHUB_CONFIG,
+    INITIAL_POLICY,
+    INITIAL_PUSHED_STACK,
+    INITIAL_WORKING_TREE_HUNKS,
+  } = await import('./seedData');
 
+  const stagedSlices = sliceHunksIntoAtomicCommits(
+    INITIAL_WORKING_TREE_HUNKS,
+    INITIAL_POLICY
+  );
+  const allUnits = [...stagedSlices, ...INITIAL_PUSHED_STACK];
 
+  // Verify all 3 CI/CD statuses ('passing', 'pending', 'failing') are represented across the stack
+  const statuses = new Set(
+    allUnits.map((u) => resolveCommitCiCdStatus(u, INITIAL_GITHUB_CONFIG).status)
+  );
+  assert.equal(statuses.has('passing'), true);
+  assert.equal(statuses.has('pending'), true);
+  assert.equal(statuses.has('failing'), true);
 
+  // Verify disconnected GitHub config returns pending
+  const disconnectedReport = resolveCommitCiCdStatus(stagedSlices[0], {
+    ...INITIAL_GITHUB_CONFIG,
+    connected: false,
+  });
+  assert.equal(disconnectedReport.status, 'pending');
+  assert.equal(disconnectedReport.steps.length, 4);
 
+  // Verify proactive merge conflict scanner detects overlapping src/types/payment.ts between Slice 1 and Slice 3
+  const slice1ConflictReport = scanStackForMergeConflicts(
+    stagedSlices[0],
+    allUnits
+  );
+  assert.equal(slice1ConflictReport.hasConflicts, true);
+  assert.equal(
+    slice1ConflictReport.conflictingFilePaths.includes('src/types/payment.ts'),
+    true
+  );
+  assert.ok(
+    slice1ConflictReport.conflictsByFile['src/types/payment.ts'].length >= 1
+  );
+  assert.equal(
+    slice1ConflictReport.conflictsByFile['src/types/payment.ts'][0].severity,
+    'high'
+  );
+});
+
+test('rebaseAndReorderPendingStack, sortStackBySemanticOrder, and buildStackDependencyGraph dynamically recompute parentBranch chains and DAG edges', async () => {
+  const {
+    buildStackDependencyGraph,
+    rebaseAndReorderPendingStack,
+    sortStackBySemanticOrder,
+  } = await import('./atomicEngine');
+  const { INITIAL_POLICY, INITIAL_WORKING_TREE_HUNKS } = await import(
+    './seedData'
+  );
+
+  const initialStack = sliceHunksIntoAtomicCommits(
+    INITIAL_WORKING_TREE_HUNKS,
+    INITIAL_POLICY
+  );
+  assert.ok(initialStack.length >= 4);
+
+  // Build initial dependency graph and verify clean topological order
+  const initialDag = buildStackDependencyGraph(
+    initialStack,
+    INITIAL_POLICY.baseBranch
+  );
+  assert.equal(initialDag.nodes.length, initialStack.length);
+  assert.equal(initialDag.orderWarningsCount, 0);
+  assert.equal(
+    initialDag.nodes[0].parentBranch,
+    INITIAL_POLICY.baseBranch
+  );
+  assert.equal(
+    initialDag.nodes[1].parentBranch,
+    initialDag.nodes[0].branchName
+  );
+  // Slice 1 and Slice 3 share src/types/payment.ts so there must be a file_coupling edge
+  assert.equal(
+    initialDag.edges.some((e) => e.kind === 'file_coupling'),
+    true
+  );
+
+  // Reorder: drag index 2 (fix(payment) which touches src/types/payment.ts) to index 0 (before refactor(payment))
+  const fixSliceIdx = initialStack.findIndex((u) => u.type === 'fix');
+  assert.ok(fixSliceIdx > 0);
+  const reorderedStack = rebaseAndReorderPendingStack(
+    initialStack,
+    fixSliceIdx,
+    0,
+    INITIAL_POLICY
+  );
+
+  assert.equal(reorderedStack[0].id, initialStack[fixSliceIdx].id);
+  // First commit now branches off main
+  assert.equal(reorderedStack[0].parentBranch, INITIAL_POLICY.baseBranch);
+  // Second commit now branches off the new first commit's branch
+  assert.equal(reorderedStack[1].parentBranch, reorderedStack[0].branchName);
+
+  // Dependency graph detects semantic order violation when fix(payment) precedes refactor(payment) on shared file src/types/payment.ts
+  const reorderedDag = buildStackDependencyGraph(
+    reorderedStack,
+    INITIAL_POLICY.baseBranch
+  );
+  assert.ok(reorderedDag.orderWarningsCount >= 1);
+  assert.ok(reorderedDag.nodes[0].orderWarning);
+  assert.equal(
+    reorderedDag.edges.some((e) => e.kind === 'order_violation'),
+    true
+  );
+
+  // Auto-sort restores clean topological order (refactor -> feat -> fix -> test -> docs)
+  const autoSorted = sortStackBySemanticOrder(reorderedStack, INITIAL_POLICY);
+  const sortedDag = buildStackDependencyGraph(
+    autoSorted,
+    INITIAL_POLICY.baseBranch
+  );
+  assert.equal(sortedDag.orderWarningsCount, 0);
+  assert.equal(autoSorted[0].type, 'refactor');
+});
