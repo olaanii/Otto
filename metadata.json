@@ -1,0 +1,6 @@
+{
+  "name": "AtomikGit — Autonomous Atomic Commit & PR Stack Agent",
+  "description": "Autonomous Git commit orchestrator and IDE watcher agent that decomposes bulk working-tree changes into modular, senior-standard atomic commits and stacked Pull Requests.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
