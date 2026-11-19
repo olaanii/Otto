@@ -88,6 +88,11 @@ type GitHubConfig struct {
 	Connected     bool   `json:"connected"`
 	LastSyncedAt  string `json:"lastSyncedAt,omitempty"`
 	Mode          string `json:"mode,omitempty"`
+	Token         string `json:"token,omitempty"`
+	UserLogin     string `json:"userLogin,omitempty"`
+	UserName      string `json:"userName,omitempty"`
+	AvatarURL     string `json:"avatarUrl,omitempty"`
+	Scopes        string `json:"scopes,omitempty"`
 }
 
 type GoogleUserProfile struct {
@@ -126,6 +131,8 @@ type AppState struct {
 	PushedStack       []AtomicCommitUnit  `json:"pushedStack"`
 	DaemonActive      bool                `json:"daemonActive"`
 	Antigravity       *AntigravitySession `json:"antigravity,omitempty"`
+	RecentWorkspaces  []string            `json:"recentWorkspaces,omitempty"`
+	LlmKeys           map[string]string   `json:"llmKeys,omitempty"`
 }
 
 type DaemonServer struct {
@@ -498,6 +505,8 @@ func (s *DaemonServer) loadOrInitState() {
 		StagedAtomicStack: []AtomicCommitUnit{},
 		PushedStack:       []AtomicCommitUnit{},
 		DaemonActive:      true,
+		RecentWorkspaces:  []string{},
+		LlmKeys:           make(map[string]string),
 	}
 	s.saveStateLocked()
 }
@@ -1390,6 +1399,8 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		r.URL.Path = "/"
 		fileServer.ServeHTTP(w, r)
 	})
+
+	s.RegisterIntegrationEndpoints(mux)
 
 	return mux
 }
