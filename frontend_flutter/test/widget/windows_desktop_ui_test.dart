@@ -25,7 +25,84 @@ import 'package:otto_frontend/presentation/providers/workspace_provider.dart';
 
 class FakeWorkspaceNotifier extends StateNotifier<WorkspaceState>
     implements WorkspaceNotifier {
-  FakeWorkspaceNotifier([WorkspaceState? state]) : super(state ?? WorkspaceState());
+  FakeWorkspaceNotifier([WorkspaceState? state])
+      : super(
+          state ??
+              WorkspaceState(
+                activeAgents: [
+                  IdeAgentProfile(
+                    id: 'claude-code',
+                    name: 'Claude Code',
+                    description: 'Terminal coding agent',
+                    colorHex: '#D97757',
+                    iconKey: 'claude',
+                    isActive: true,
+                    lastActiveAt: DateTime.now(),
+                  ),
+                  IdeAgentProfile(
+                    id: 'cursor',
+                    name: 'Cursor',
+                    description: 'AI code editor',
+                    colorHex: '#5C5C66',
+                    iconKey: 'cursor',
+                    isActive: true,
+                    lastActiveAt: DateTime.now(),
+                  ),
+                ],
+                stackGraph: StackDependencyGraph(
+                  commits: [
+                    AtomicCommitUnit(
+                      id: 'c1',
+                      type: 'feat',
+                      scope: 'stack',
+                      summary: 'feat/stack-model',
+                      branchName: 'feat/stack-model',
+                      prNumber: 241,
+                      status: CommitStatus.readyToPush,
+                      isPushed: true,
+                      additions: 30,
+                      deletions: 5,
+                    ),
+                    AtomicCommitUnit(
+                      id: 'c2',
+                      type: 'feat',
+                      scope: 'diff',
+                      summary: 'feat/diff-parser',
+                      branchName: 'feat/diff-parser',
+                      prNumber: 242,
+                      status: CommitStatus.draft,
+                      parentCommitId: 'c1',
+                      additions: 45,
+                      deletions: 10,
+                    ),
+                    AtomicCommitUnit(
+                      id: 'c3',
+                      type: 'feat',
+                      scope: 'dag',
+                      summary: 'feat/dag-view',
+                      branchName: 'feat/dag-view',
+                      prNumber: 243,
+                      status: CommitStatus.inReview,
+                      parentCommitId: 'c2',
+                      additions: 20,
+                      deletions: 2,
+                    ),
+                    AtomicCommitUnit(
+                      id: 'c4',
+                      type: 'fix',
+                      scope: 'rebase',
+                      summary: 'fix/rebase-conflict',
+                      branchName: 'fix/rebase-conflict',
+                      prNumber: 244,
+                      status: CommitStatus.readyToPush,
+                      parentCommitId: 'c3',
+                      additions: 15,
+                      deletions: 3,
+                    ),
+                  ],
+                ),
+              ),
+        );
 
   @override
   Future<void> refreshWorkspace() async {}
@@ -227,13 +304,8 @@ void main() {
       await tester.tap(workingChangesBtn);
       await tester.pumpAndSettle();
 
-      // Verify Working changes content rendered
-      expect(find.text('Atomic commits'), findsOneWidget);
-      expect(find.text('app/stack.ts'), findsWidgets);
-      expect(find.text('ui/Sidebar.tsx'), findsOneWidget);
-      expect(find.text('tests/stack.test.ts'), findsOneWidget);
-      expect(find.text('config/eslint.json'), findsOneWidget);
-      expect(find.text('3 hunks'), findsOneWidget);
+      // Verify Working changes content rendered (Clean empty state)
+      expect(find.text('Working tree clean'), findsOneWidget);
 
       // Switch back to Stacked PRs subview
       // Find the subview button inside the subview switcher
@@ -268,11 +340,8 @@ void main() {
       await tester.tap(diffViewerNavTile);
       await tester.pumpAndSettle();
 
-      // Verify Diff Viewer view rendered (Figma 90:934)
-      expect(find.text('app/stack.ts · split view'), findsOneWidget);
-      expect(find.text('Before'), findsOneWidget);
-      expect(find.text('After'), findsOneWidget);
-      expect(find.textContaining('export function buildStack'), findsWidgets);
+      // Verify Diff Viewer view rendered (Clean empty state)
+      expect(find.text('No file diffs'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -293,11 +362,9 @@ void main() {
 
       // Verify Rebase canvas view rendered
       expect(find.text('Rebase canvas'), findsOneWidget);
-      expect(find.text('Drag to reorder · choose an action per commit'), findsOneWidget);
-      expect(find.textContaining('feat: add stacked PR model'), findsOneWidget);
-      expect(find.textContaining('refactor: split diff hunks'), findsOneWidget);
-      expect(find.textContaining('feat: DAG validation'), findsOneWidget);
-      expect(find.textContaining('Depends on a1f3c2d'), findsOneWidget);
+      expect(find.textContaining('commits in stack'), findsOneWidget);
+      expect(find.textContaining('feat/stack-model'), findsWidgets);
+      expect(find.textContaining('feat/diff-parser'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -467,7 +534,17 @@ void main() {
                   selectedIndex: selectedIndex,
                   onIndexChanged: (idx) => selectedIndex = idx,
                   items: navItems,
-                  activeAgents: IdeAgentProfile.defaults,
+                  activeAgents: [
+                    IdeAgentProfile(
+                      id: 'antigravity',
+                      name: 'Google Antigravity',
+                      description: 'Autonomous Coding & Slicing Agent',
+                      colorHex: '#4285F4',
+                      iconKey: 'bot',
+                      isActive: true,
+                      lastActiveAt: DateTime.now(),
+                    ),
+                  ],
                 ),
                 const Expanded(child: SizedBox()),
               ],

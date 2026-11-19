@@ -1,7 +1,8 @@
-import express from 'express';
+﻿import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { GoogleGenAI, Type } from '@google/genai';
 import {
   ensurePushedStackItems,
@@ -30,6 +31,7 @@ import {
 } from './src/types/git';
 
 interface PersistedState {
+  connectedUser: { email: string; name: string; authProvider: string; avatarUrl?: string } | null;
   policy: GuardrailPolicy;
   githubConfig: GitHubConnectionConfig;
   ideProfiles: IdeAgentProfile[];
@@ -77,6 +79,7 @@ function loadOrInitializeState(): PersistedState {
     promptStream: INITIAL_PROMPT_STREAM,
     dailyCadence: INITIAL_DAILY_CADENCE,
     daemonActive: true,
+    connectedUser: null,
   };
 
   saveState(initialState);
@@ -164,8 +167,22 @@ async function startServer() {
       avatarUrl?: string;
     };
 
-    const userEmail = email || 'olaaniiishaambal@gmail.com';
-    const userName = name || 'Olani Shambel';
+    let userEmail = (email && email.trim() !== 'auto') ? email.trim() : '';
+    let userName = name?.trim();
+    if (!userEmail) {
+      try {
+        const detected = execSync('git config user.email', { encoding: 'utf8' }).trim();
+        if (detected) userEmail = detected;
+      } catch {}
+      if (!userEmail) userEmail = 'user@example.com';
+    }
+    if (!userName) {
+      try {
+        const detectedName = execSync('git config user.name', { encoding: 'utf8' }).trim();
+        if (detectedName) userName = detectedName;
+      } catch {}
+      if (!userName) userName = userEmail.split('@')[0];
+    }
     const provider = authProvider || 'google';
 
     const antigravitySession = {
@@ -192,6 +209,10 @@ async function startServer() {
     );
 
     saveState(appState);
+    appState.connectedUser = { email: userEmail, name: userName, authProvider: provider, avatarUrl };
+    saveState(appState);
+    appState.connectedUser = { email: userEmail, name: userName, authProvider: provider, avatarUrl };
+    saveState(appState);
     broadcastSseEvent('antigravity_connected', antigravitySession);
     res.json({
       ok: true,
@@ -216,11 +237,7 @@ async function startServer() {
         realtimeWatch: true,
         docIsolation: true,
       },
-      user: {
-        email: 'olaaniiishaambal@gmail.com',
-        name: 'Olani Shambel',
-        authProvider: 'google',
-      },
+      user: appState.connectedUser,
       ideProfiles: appState.ideProfiles,
     });
   });
@@ -294,7 +311,7 @@ async function startServer() {
       defaultBranch?: string;
     };
 
-    const targetOwner = owner || 'olaanii';
+    const targetOwner = owner || '';
     const targetRepo = repo || 'Otto';
     const targetBranch = defaultBranch || 'main';
 
