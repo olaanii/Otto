@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_endpoints.dart';
+import '../../../core/errors/exceptions.dart';
 import '../../../domain/models/atomic_commit_unit.dart';
 import '../../../domain/models/diff_hunk.dart';
 import '../../../domain/models/ide_agent_profile.dart';
@@ -233,7 +234,11 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
           ),
           FilledButton(
             onPressed: () async {
-              final path = controller.text.trim();
+              var path = controller.text.trim();
+              if ((path.startsWith('"') && path.endsWith('"')) ||
+                  (path.startsWith("'") && path.endsWith("'"))) {
+                path = path.substring(1, path.length - 1).trim();
+              }
               if (path.isNotEmpty) {
                 Navigator.of(ctx).pop();
                 try {
@@ -255,7 +260,8 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                     _showFluentInfoBar(message: '$err', isError: true);
                   }
                 } catch (e) {
-                  _showFluentInfoBar(message: 'Failed to open repository: $e', isError: true);
+                  final msg = e is ServerException ? e.message : '$e';
+                  _showFluentInfoBar(message: 'Failed to open repository: $msg', isError: true);
                 }
               }
             },

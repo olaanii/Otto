@@ -112,9 +112,9 @@ class ApiClient {
 
   Exception _handleDioError(DioException error) {
     final statusCode = error.response?.statusCode;
-    final message = error.response?.data?['message']?.toString() ??
-        error.message ??
-        'Unknown network error';
+    final respData = error.response?.data;
+    final serverError = respData is Map ? (respData['error'] ?? respData['message'])?.toString() : null;
+    final message = serverError ?? error.message ?? 'Unknown network error';
 
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
