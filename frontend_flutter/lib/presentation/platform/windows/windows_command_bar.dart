@@ -103,7 +103,7 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
   Widget build(BuildContext context) {
     return Container(
       height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: const BoxDecoration(
         color: Color(0xFF202020),
         border: Border(
@@ -115,10 +115,11 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
       ),
       child: Row(
         children: [
-          // 1. Figma Input/ComboBox: Current Branch & Repository Selector
-          _BranchPill(
+          // 1. Interactive Repository & Branch Selector Pill
+          _RepoAndBranchPill(
+            repositoryName: widget.repositoryName.isNotEmpty ? widget.repositoryName : 'Otto',
             branch: widget.currentBranch,
-            tooltip: 'Active Git Branch: ${widget.currentBranch} • Repository: ${widget.repositoryName}',
+            tooltip: 'Active Repository: ${widget.repositoryName} • Branch: ${widget.currentBranch} (Click to switch)',
             onTap: widget.onOpenRepository,
           ),
 
@@ -350,13 +351,20 @@ class _ActiveModelPill extends StatelessWidget {
   }
 }
 
-/// Figma Input/ComboBox: Active Git Branch selector.
-class _BranchPill extends StatelessWidget {
+/// Repository Selector Pill with folder icon.
+/// Interactive Repository & Branch Selector Pill.
+class _RepoAndBranchPill extends StatelessWidget {
+  final String repositoryName;
   final String branch;
   final String tooltip;
   final VoidCallback? onTap;
 
-  const _BranchPill({required this.branch, required this.tooltip, this.onTap});
+  const _RepoAndBranchPill({
+    required this.repositoryName,
+    required this.branch,
+    required this.tooltip,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -367,10 +375,9 @@ class _BranchPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         child: Container(
           height: 32,
-          width: 128,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFF3A3A3A),
+            color: const Color(0xFF353535),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
               color: const Color(0xFF484848),
@@ -378,26 +385,44 @@ class _BranchPill extends StatelessWidget {
             ),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
+              const Icon(Icons.folder_open_rounded, size: 13, color: Color(0xFF60CDFF)),
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 68),
+                child: Text(
+                  repositoryName,
+                  style: const TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text('•', style: TextStyle(color: Color(0xFF888888), fontSize: 11)),
+              ),
+              const Icon(Icons.fork_right_rounded, size: 13, color: Color(0xFF888888)),
+              const SizedBox(width: 2),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 58),
                 child: Text(
                   branch,
                   style: const TextStyle(
                     fontFamily: FluentTypography.fontFamily,
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w400,
-                    color: Colors.white,
+                    color: Color(0xFFCCCCCC),
                   ),
-                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: Color(0xFFB3B3B3),
-              ),
+              const SizedBox(width: 2),
+              const Icon(Icons.arrow_drop_down_rounded, size: 15, color: Color(0xFFB3B3B3)),
             ],
           ),
         ),
