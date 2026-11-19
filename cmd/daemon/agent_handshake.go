@@ -3,7 +3,20 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os/exec"
+	"runtime"
 )
+
+// focusOttoDesktopWindow brings the Otto desktop app into active OS foreground focus.
+func focusOttoDesktopWindow() {
+	go func() {
+		if runtime.GOOS == "windows" {
+			_ = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", "$w=New-Object -ComObject WScript.Shell; $w.AppActivate('Otto'); $w.AppActivate('otto_frontend')").Run()
+		} else if runtime.GOOS == "darwin" {
+			_ = exec.Command("osascript", "-e", `tell application "Otto" to activate`).Run()
+		}
+	}()
+}
 
 // RegisterAgentHandshakeEndpoints registers /agents/authorize and confirmation routes.
 func (s *DaemonServer) RegisterAgentHandshakeEndpoints(mux *http.ServeMux) {
@@ -50,6 +63,7 @@ func (s *DaemonServer) RegisterAgentHandshakeEndpoints(mux *http.ServeMux) {
 
 		if confirmed {
 			provisionOttoBridge(targetDir)
+			focusOttoDesktopWindow()
 			s.broadcastEvent("agent_connected", map[string]any{"agentId": body.AgentID, "confirmed": true})
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID, "connected": true})
 			return
