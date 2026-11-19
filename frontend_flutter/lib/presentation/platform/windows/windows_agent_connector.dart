@@ -52,4 +52,40 @@ class WindowsAgentConnector {
       showInfoBar('Failed to disconnect: $e', isError: true);
     }
   }
+
+  static void showOptions({
+    required BuildContext context,
+    required WidgetRef ref,
+    required IdeAgentProfile agent,
+    required String repoPath,
+    required void Function(String message, {bool isError}) showInfoBar,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF242424),
+        title: Text(agent.name, style: const TextStyle(color: Colors.white, fontSize: 16)),
+        content: const Text(
+          'Agent is active and connected. Deep link URI launches and focuses the IDE with workspace bridge rules enabled.',
+          style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await disconnect(ref: ref, agent: agent, showInfoBar: showInfoBar);
+            },
+            child: const Text('Disconnect', style: TextStyle(color: Colors.redAccent)),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await connect(ref: ref, context: context, agent: agent, repoPath: repoPath, showInfoBar: showInfoBar);
+            },
+            child: const Text('Focus in IDE ↗'),
+          ),
+        ],
+      ),
+    );
+  }
 }
