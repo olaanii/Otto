@@ -20,7 +20,7 @@ class WindowsTitleBar extends StatefulWidget implements PreferredSizeWidget {
     this.subtitle,
     this.leading,
     this.customActions,
-    this.height = 40.0,
+    this.height = 32.0,
   });
 
   @override
@@ -80,69 +80,44 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> with WindowListener {
 
     return Container(
       height: widget.height,
-      decoration: BoxDecoration(
-        color: isDark
-            ? FluentMicaColors.micaBaseDark.withOpacity(0.95)
-            : FluentMicaColors.micaBaseLight.withOpacity(0.95),
+      decoration: const BoxDecoration(
+        color: Color(0xFF202020),
         border: Border(
           bottom: BorderSide(
-            color: isDark
-                ? FluentMicaColors.dividerStrokeDark
-                : FluentMicaColors.dividerStrokeLight,
+            color: Color(0xFF3A3A3A),
             width: 1,
           ),
         ),
       ),
       child: Row(
         children: [
-          // Left: App Brand & Icon (Non-draggable or draggable drag region)
+          // Left: App Brand & Icon
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onPanStart: (_) => _wm.startDragging(),
             onDoubleTap: () => _wm.maximizeOrRestore(),
             child: Padding(
-              padding: const EdgeInsets.only(left: 14.0, right: 10.0),
+              padding: const EdgeInsets.only(left: 12.0, right: 8.0),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   widget.leading ??
                       Container(
-                        width: 20,
-                        height: 20,
+                        width: 16,
+                        height: 16,
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? FluentMicaColors.accentLight
-                              : FluentMicaColors.accentIndigo,
+                          color: const Color(0xFF60CDFF),
                           borderRadius: BorderRadius.circular(4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: isDark
-                                  ? FluentMicaColors.accentLight.withOpacity(0.3)
-                                  : FluentMicaColors.accentIndigo.withOpacity(0.25),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            'O',
-                            style: TextStyle(
-                              fontFamily: FluentTypography.fontFamily,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.black : Colors.white,
-                            ),
-                          ),
                         ),
                       ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Text(
                     widget.title,
-                    style: FluentTypography.bodyStrong.copyWith(
-                      fontSize: 12.5,
-                      color: isDark
-                          ? FluentMicaColors.textPrimaryDark
-                          : FluentMicaColors.textPrimaryLight,
+                    style: const TextStyle(
+                      fontFamily: FluentTypography.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white,
                     ),
                   ),
                   if (widget.subtitle != null) ...[

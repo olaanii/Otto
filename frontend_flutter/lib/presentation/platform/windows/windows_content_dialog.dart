@@ -277,9 +277,10 @@ class _GitConfirmationDialogState extends State<GitConfirmationDialog> {
               ? null
               : () async {
                   setState(() => _isPushing = true);
+                  final nav = Navigator.of(context);
                   final success = await widget.onConfirmPush(forceWithLease: _forceWithLease);
                   if (mounted) {
-                    Navigator.of(context).pop(success);
+                    nav.pop(success);
                   }
                 },
           style: FluentButtonStyle.accent,
@@ -543,6 +544,7 @@ class _SplitCommitDialogState extends State<SplitCommitDialog> {
               ? null
               : () async {
                   setState(() => _isCommitting = true);
+                  final nav = Navigator.of(context);
                   await widget.onCommit(
                     summary: _summaryController.text.trim(),
                     description: _descController.text.trim().isEmpty
@@ -553,7 +555,7 @@ class _SplitCommitDialogState extends State<SplitCommitDialog> {
                         ? null
                         : _scopeController.text.trim(),
                   );
-                  if (mounted) Navigator.of(context).pop();
+                  if (mounted) nav.pop();
                 },
           style: FluentButtonStyle.accent,
           child: Row(
@@ -676,6 +678,224 @@ class RebaseActionDialog extends StatelessWidget {
           child: const Text('Execute Rebase'),
         ),
       ],
+    );
+  }
+}
+
+/// Windows 11 Fluent Keyboard Shortcuts Dialog (Figma 90:479).
+class Windows11KeyboardShortcutsDialog extends StatelessWidget {
+  const Windows11KeyboardShortcutsDialog({super.key});
+
+  static Future<void> show(BuildContext context) {
+    return showDialog(
+      context: context,
+      barrierColor: const Color(0x59000000), // rgba(0,0,0,0.35)
+      builder: (ctx) => const Windows11KeyboardShortcutsDialog(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 680,
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF3A3A3A)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x7A000000),
+                blurRadius: 32,
+                offset: Offset(0, 16),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Keyboard shortcuts',
+                        style: TextStyle(
+                          fontFamily: FluentTypography.fontFamily,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Otto · Ctrl-based shortcuts on Windows',
+                        style: TextStyle(
+                          fontFamily: FluentTypography.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFFB3B3B3),
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16, color: Color(0xFFB3B3B3)),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Column 1
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSection('WORKSPACE', [
+                          _buildShortcutRow('Open HUD', ['Ctrl', 'Shift', 'K']),
+                          _buildShortcutRow('Stacked PRs', ['Ctrl', '1']),
+                          _buildShortcutRow('Diff Viewer', ['Ctrl', '2']),
+                          _buildShortcutRow('Rebase Canvas', ['Ctrl', '3']),
+                          _buildShortcutRow('AI Agents', ['Ctrl', '4']),
+                          _buildShortcutRow('Settings', ['Ctrl', ',']),
+                        ]),
+                        const SizedBox(height: 16),
+                        _buildSection('GLOBAL', [
+                          _buildShortcutRow('Sync now', ['Ctrl', 'R']),
+                          _buildShortcutRow('Toggle Auto-Pilot', ['Ctrl', 'Alt', 'P']),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 32),
+                  // Column 2
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSection('COMMIT', [
+                          _buildShortcutRow('Generate message', ['Ctrl', 'Shift', 'G']),
+                          _buildShortcutRow('Stage hunk', ['Ctrl', 'Shift', 'S']),
+                          _buildShortcutRow('Unstage hunk', ['Ctrl', 'Shift', 'U']),
+                          _buildShortcutRow('Commit', ['Ctrl', 'Enter']),
+                        ]),
+                        const SizedBox(height: 16),
+                        _buildSection('REBASE CANVAS', [
+                          _buildShortcutRow('Move commit up', ['Alt', 'Up']),
+                          _buildShortcutRow('Move commit down', ['Alt', 'Down']),
+                          _buildShortcutRow('Apply rebase', ['Ctrl', 'Enter']),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // Footer with Close button (Figma 90:630)
+              Align(
+                alignment: Alignment.centerRight,
+                child: FluentButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: FluentButtonStyle.accent,
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> rows) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontFamily: FluentTypography.fontFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFB3B3B3),
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...rows,
+      ],
+    );
+  }
+
+  Widget _buildShortcutRow(String label, List<String> keys) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontFamily: FluentTypography.fontFamily,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: Colors.white,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (int i = 0; i < keys.length; i++) ...[
+                if (i > 0)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      '+',
+                      style: TextStyle(
+                        fontFamily: FluentTypography.fontFamily,
+                        fontSize: 11,
+                        color: Color(0xFFB3B3B3),
+                      ),
+                    ),
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF383838),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF4A4A4A)),
+                  ),
+                  child: Text(
+                    keys[i],
+                    style: const TextStyle(
+                      fontFamily: FluentTypography.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

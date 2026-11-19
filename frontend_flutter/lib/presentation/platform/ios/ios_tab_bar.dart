@@ -40,12 +40,9 @@ class IosTabBar extends StatelessWidget {
           onTabSelected(index);
         }
       },
-      backgroundColor: IosColors.resolve(
-        isDark
-            ? const CupertinoDynamicColor.withSettings(color: Color(0xD9121212))
-            : const CupertinoDynamicColor.withSettings(color: Color(0xD9F8F8F8)),
-        context,
-      ),
+      backgroundColor: isDark
+          ? const Color(0xD9121212)
+          : const Color(0xD9F8F8F8),
       activeColor: IosColors.resolve(IosColors.systemIndigo, context),
       inactiveColor: IosColors.resolve(IosColors.secondaryLabel, context),
       border: Border(
@@ -204,12 +201,9 @@ class IosSegmentedControl<T extends Object> extends StatelessWidget {
         }
       },
       backgroundColor: IosColors.resolve(IosColors.systemFill, context),
-      thumbColor: IosColors.resolve(
-        isDark
-            ? const CupertinoDynamicColor.withSettings(color: Color(0xFF3A3A3C))
-            : const CupertinoDynamicColor.withSettings(color: Color(0xFFFFFFFF)),
-        context,
-      ),
+      thumbColor: isDark
+          ? const Color(0xFF3A3A3C)
+          : const Color(0xFFFFFFFF),
       padding: const EdgeInsets.all(2.5),
     );
   }

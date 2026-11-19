@@ -33,7 +33,7 @@ class FakeSecureStorageService extends SecureStorageService {
 
 class FakeErrorInterceptorHandler extends ErrorInterceptorHandler {
   DioException? errorPassed;
-  Response? resolvedResponse;
+  Response<dynamic>? resolvedResponse;
 
   @override
   void next(DioException err) {
@@ -41,12 +41,12 @@ class FakeErrorInterceptorHandler extends ErrorInterceptorHandler {
   }
 
   @override
-  void resolve(Response response) {
+  void resolve(Response<dynamic> response) {
     resolvedResponse = response;
   }
 
   @override
-  void reject(DioException err) {
+  void reject(DioException err, [bool silent = false]) {
     errorPassed = err;
   }
 }

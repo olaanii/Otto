@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 /// Global hotkey service listening for desktop keyboard shortcuts
@@ -22,10 +23,10 @@ class HotkeyService {
     try {
       await hotKeyManager.unregisterAll();
 
-      final modifier = Platform.isMacOS ? KeyModifier.meta : KeyModifier.control;
+      final modifier = Platform.isMacOS ? HotKeyModifier.meta : HotKeyModifier.control;
       _hudHotKey = HotKey(
-        KeyCode.keyK,
-        modifiers: [modifier, KeyModifier.shift],
+        key: PhysicalKeyboardKey.keyK,
+        modifiers: [modifier, HotKeyModifier.shift],
         scope: HotKeyScope.system,
       );
 

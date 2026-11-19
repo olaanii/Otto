@@ -77,176 +77,187 @@ class _WindowsNavigationViewState extends State<WindowsNavigationView> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final paneWidth = _isCollapsed ? 52.0 : 260.0;
+    final paneWidth = _isCollapsed ? 52.0 : 240.0;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       width: paneWidth,
-      decoration: BoxDecoration(
-        color: isDark
-            ? FluentMicaColors.micaAltDark.withOpacity(0.92)
-            : FluentMicaColors.micaAltLight.withOpacity(0.92),
+      clipBehavior: Clip.hardEdge,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1B1B1B),
         border: Border(
           right: BorderSide(
-            color: isDark
-                ? FluentMicaColors.dividerStrokeDark
-                : FluentMicaColors.dividerStrokeLight,
+            color: Color(0xFF3A3A3A),
             width: 1,
           ),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Pane Header & Collapse Button
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0, left: 6.0, right: 6.0, bottom: 4.0),
-            child: Row(
-              children: [
-                _NavIconButton(
-                  icon: Icons.menu_rounded,
-                  tooltip: _isCollapsed ? 'Expand Navigation Pane' : 'Collapse Navigation Pane',
-                  onTap: _toggleCollapsed,
-                ),
-                if (!_isCollapsed) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'Workspace',
-                    style: FluentTypography.bodyStrong.copyWith(
-                      fontSize: 13,
-                      color: isDark
-                          ? FluentMicaColors.textPrimaryDark
-                          : FluentMicaColors.textPrimaryLight,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 140;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Pane Header & Collapse Button
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0, left: 6.0, right: 6.0, bottom: 4.0),
+                child: Row(
+                  children: [
+                    _NavIconButton(
+                      icon: Icons.menu_rounded,
+                      tooltip: _isCollapsed ? 'Expand Navigation Pane' : 'Collapse Navigation Pane',
+                      onTap: _toggleCollapsed,
                     ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // 2. Fluent Search Box
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: _isCollapsed
-                ? _NavIconButton(
-                    icon: Icons.search_rounded,
-                    tooltip: 'Search (Expand to view)',
-                    onTap: _toggleCollapsed,
-                  )
-                : _FluentSearchBox(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    onChanged: (val) {
-                      widget.onSearchChanged?.call(val);
-                      setState(() {});
-                    },
-                  ),
-          ),
-
-          const SizedBox(height: 6),
-
-          // 3. Primary Navigation Items
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 6.0),
-              children: [
-                for (int i = 0; i < widget.items.length; i++)
-                  _NavTile(
-                    item: widget.items[i],
-                    isSelected: widget.selectedIndex == i,
-                    isCollapsed: _isCollapsed,
-                    onTap: () => widget.onIndexChanged(i),
-                  ),
-
-                const SizedBox(height: 12),
-
-                // 4. Active IDE AI Agents Section
-                if (widget.activeAgents.isNotEmpty) ...[
-                  if (!_isCollapsed)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.smart_toy_outlined,
-                            size: 13,
+                    if (!isCompact) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Workspace',
+                          style: FluentTypography.bodyStrong.copyWith(
+                            fontSize: 13,
                             color: isDark
-                                ? FluentMicaColors.accentLight
-                                : FluentMicaColors.accentIndigo,
+                                ? FluentMicaColors.textPrimaryDark
+                                : FluentMicaColors.textPrimaryLight,
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Active IDE Agents',
-                            style: FluentTypography.captionStrong.copyWith(
-                              fontSize: 11,
-                              color: isDark
-                                  ? FluentMicaColors.textSecondaryDark
-                                  : FluentMicaColors.textSecondaryLight,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${widget.activeAgents.where((a) => a.isActive).length} online',
-                            style: FluentTypography.caption.copyWith(
-                              fontSize: 10,
-                              color: FluentMicaColors.gitAdded,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                        ),
                       ),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Divider(
-                        height: 1,
-                        color: isDark
-                            ? FluentMicaColors.dividerStrokeDark
-                            : FluentMicaColors.dividerStrokeLight,
-                      ),
-                    ),
-
-                  // Agent Rows
-                  for (final agent in widget.activeAgents)
-                    _AgentNavRow(
-                      agent: agent,
-                      isCollapsed: _isCollapsed,
-                      onTap: () => widget.onAgentSelected?.call(agent),
-                      onSlice: () => widget.onSliceAgentChanges?.call(agent),
-                    ),
-                ],
-              ],
-            ),
-          ),
-
-          // 5. Pane Footer (Settings & Collapse Toggle)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 8.0),
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(
-                  color: isDark
-                      ? FluentMicaColors.dividerStrokeDark
-                      : FluentMicaColors.dividerStrokeLight,
-                  width: 1,
+                    ],
+                  ],
                 ),
               ),
-            ),
-            child: _NavTile(
-              item: const FluentNavigationItem(
-                label: 'Settings & Policy',
-                icon: Icons.settings_outlined,
-                selectedIcon: Icons.settings,
+
+              // 2. Fluent Search Box
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                child: isCompact
+                    ? _NavIconButton(
+                        icon: Icons.search_rounded,
+                        tooltip: 'Search (Expand to view)',
+                        onTap: _toggleCollapsed,
+                      )
+                    : _FluentSearchBox(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        onChanged: (val) {
+                          widget.onSearchChanged?.call(val);
+                          setState(() {});
+                        },
+                      ),
               ),
-              isSelected: false,
-              isCollapsed: _isCollapsed,
-              onTap: widget.onOpenSettings,
-            ),
-          ),
-        ],
+
+              const SizedBox(height: 6),
+
+              // 3. Primary Navigation Items
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                  children: [
+                    for (int i = 0; i < widget.items.length; i++)
+                      _NavTile(
+                        item: widget.items[i],
+                        isSelected: widget.selectedIndex == i,
+                        isCollapsed: isCompact,
+                        onTap: () => widget.onIndexChanged(i),
+                      ),
+
+                    const SizedBox(height: 12),
+
+                    // 4. Active IDE AI Agents Section
+                    if (widget.activeAgents.isNotEmpty) ...[
+                      if (!isCompact)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.smart_toy_outlined,
+                                size: 13,
+                                color: isDark
+                                    ? FluentMicaColors.accentLight
+                                    : FluentMicaColors.accentIndigo,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Active IDE Agents',
+                                  style: FluentTypography.captionStrong.copyWith(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? FluentMicaColors.textSecondaryDark
+                                        : FluentMicaColors.textSecondaryLight,
+                                    letterSpacing: 0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${widget.activeAgents.where((a) => a.isActive).length} online',
+                                style: FluentTypography.caption.copyWith(
+                                  fontSize: 10,
+                                  color: FluentMicaColors.gitAdded,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Divider(
+                            height: 1,
+                            color: isDark
+                                ? FluentMicaColors.dividerStrokeDark
+                                : FluentMicaColors.dividerStrokeLight,
+                          ),
+                        ),
+
+                      // Agent Rows
+                      for (final agent in widget.activeAgents)
+                        _AgentNavRow(
+                          agent: agent,
+                          isCollapsed: isCompact,
+                          onTap: () => widget.onAgentSelected?.call(agent),
+                          onSlice: () => widget.onSliceAgentChanges?.call(agent),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // 5. Pane Footer (Settings & Collapse Toggle)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 8.0),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark
+                          ? FluentMicaColors.dividerStrokeDark
+                          : FluentMicaColors.dividerStrokeLight,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: _NavTile(
+                  item: const FluentNavigationItem(
+                    label: 'Settings & Policy',
+                    icon: Icons.settings_outlined,
+                    selectedIcon: Icons.settings,
+                  ),
+                  isSelected: false,
+                  isCollapsed: isCompact,
+                  onTap: widget.onOpenSettings,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -281,30 +292,27 @@ class _NavTileState extends State<_NavTile> {
 
     Color bg;
     if (widget.isSelected) {
-      bg = isDark
-          ? FluentMicaColors.subtleFillTertiaryDark
-          : FluentMicaColors.subtleFillTertiaryLight;
+      bg = const Color(0xFF2F2F2F);
     } else if (_isHovered) {
-      bg = isDark
-          ? FluentMicaColors.subtleFillSecondaryDark
-          : FluentMicaColors.subtleFillSecondaryLight;
+      bg = const Color(0xFF262626);
     } else {
       bg = Colors.transparent;
     }
 
     final fg = widget.isSelected
-        ? (isDark ? FluentMicaColors.textPrimaryDark : FluentMicaColors.textPrimaryLight)
-        : (isDark ? FluentMicaColors.textSecondaryDark : FluentMicaColors.textSecondaryLight);
+        ? Colors.white
+        : const Color(0xFFB3B3B3);
 
     final tileContent = MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          height: 38,
+          height: 32,
           margin: const EdgeInsets.symmetric(vertical: 2.0),
           decoration: BoxDecoration(
             color: bg,
@@ -313,45 +321,48 @@ class _NavTileState extends State<_NavTile> {
           child: Stack(
             alignment: Alignment.centerLeft,
             children: [
-              // Left Selection Indicator Pill
+              // Figma Left Selection Indicator
               if (widget.isSelected)
                 Positioned(
-                  left: 0,
-                  top: 10,
-                  bottom: 10,
+                  left: 6,
+                  top: 8,
                   child: Container(
-                    width: 3.5,
+                    width: 3,
+                    height: 16,
                     decoration: BoxDecoration(
-                      color: accent,
+                      color: const Color(0xFF60CDFF),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
 
-              // Content Row
-              Padding(
-                padding: EdgeInsets.only(
-                  left: widget.isCollapsed ? 12.0 : 14.0,
-                  right: 10.0,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      widget.isSelected
-                          ? (widget.item.selectedIcon ?? widget.item.icon)
-                          : widget.item.icon,
-                      size: 16,
-                      color: widget.isSelected ? accent : fg,
-                    ),
-                    if (!widget.isCollapsed) ...[
-                      const SizedBox(width: 12),
+              // Content
+              if (widget.isCollapsed)
+                Center(
+                  child: Icon(
+                    widget.isSelected
+                        ? (widget.item.selectedIcon ?? widget.item.icon)
+                        : widget.item.icon,
+                    size: 16,
+                    color: widget.isSelected ? const Color(0xFF60CDFF) : fg,
+                  ),
+                )
+              else
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: widget.isSelected ? 20.0 : 12.0,
+                    right: 12.0,
+                  ),
+                  child: Row(
+                    children: [
                       Expanded(
                         child: Text(
                           widget.item.label,
-                          style: FluentTypography.body.copyWith(
-                            fontSize: 12.5,
+                          style: TextStyle(
+                            fontFamily: FluentTypography.fontFamily,
+                            fontSize: 13,
                             fontWeight:
-                                widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+                                widget.isSelected ? FontWeight.w500 : FontWeight.w400,
                             color: fg,
                           ),
                           maxLines: 1,
@@ -393,9 +404,8 @@ class _NavTileState extends State<_NavTile> {
                           ),
                         ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -466,34 +476,57 @@ class _AgentNavRowState extends State<_AgentNavRow> {
             color: bg,
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Row(
-            children: [
-              // Agent Icon with status badge
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AgentIconAvatar(agent: widget.agent, size: 20),
-                  Positioned(
-                    bottom: -1,
-                    right: -1,
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isDark ? const Color(0xFF202020) : Colors.white,
-                          width: 1.5,
+          child: widget.isCollapsed
+              ? Center(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AgentIconAvatar(agent: widget.agent, size: 20),
+                      Positioned(
+                        bottom: -1,
+                        right: -1,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF202020) : Colors.white,
+                              width: 1.5,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-
-              if (!widget.isCollapsed) ...[
-                const SizedBox(width: 10),
+                )
+              : Row(
+                  children: [
+                    // Agent Icon with status badge
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        AgentIconAvatar(agent: widget.agent, size: 20),
+                        Positioned(
+                          bottom: -1,
+                          right: -1,
+                          child: Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF202020) : Colors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -546,9 +579,8 @@ class _AgentNavRowState extends State<_AgentNavRow> {
                       ),
                     ),
                   ),
-              ],
-            ],
-          ),
+                ],
+              ),
         ),
       ),
     );

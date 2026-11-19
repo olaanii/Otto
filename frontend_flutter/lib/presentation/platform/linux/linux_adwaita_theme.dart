@@ -327,7 +327,7 @@ class LinuxAdwaitaTheme {
         error: tokens.destructive,
       ),
       textTheme: textTheme,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: tokens.cardBg,
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -359,7 +359,7 @@ class LinuxAdwaitaTheme {
       ),
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: MaterialStateProperty.all(tokens.borderCrisp),
-        radius: const Radius.circular(tokens.pillRadius),
+        radius: Radius.circular(tokens.pillRadius),
         thickness: MaterialStateProperty.all(5),
       ),
     );
@@ -387,7 +387,7 @@ class LinuxAdwaitaTheme {
         error: tokens.destructive,
       ),
       textTheme: textTheme,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: tokens.cardBg,
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -426,7 +426,7 @@ class LinuxAdwaitaTheme {
       ),
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: MaterialStateProperty.all(tokens.borderCrisp),
-        radius: const Radius.circular(tokens.pillRadius),
+        radius: Radius.circular(tokens.pillRadius),
         thickness: MaterialStateProperty.all(5),
       ),
     );

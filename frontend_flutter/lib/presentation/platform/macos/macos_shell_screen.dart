@@ -528,7 +528,7 @@ class _MacOSShellScreenState extends ConsumerState<MacOSShellScreen> {
               deletions: 0,
               changedFiles: [],
               parentCommitId: null,
-              createdAt: DateTime.now(),
+              timestamp: DateTime.now(),
             ),
     );
 

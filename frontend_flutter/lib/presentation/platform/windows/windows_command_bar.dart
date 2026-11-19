@@ -19,6 +19,7 @@ class WindowsCommandBar extends StatefulWidget {
   final VoidCallback? onOpenRebase;
   final VoidCallback? onToggleHud;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenShortcuts;
   final VoidCallback? onSignOut;
 
   const WindowsCommandBar({
@@ -35,6 +36,7 @@ class WindowsCommandBar extends StatefulWidget {
     this.onOpenRebase,
     this.onToggleHud,
     this.onOpenSettings,
+    this.onOpenShortcuts,
     this.onSignOut,
   });
 
@@ -77,40 +79,34 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? FluentMicaColors.micaBaseDark.withOpacity(0.85)
-            : FluentMicaColors.micaBaseLight.withOpacity(0.85),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF202020),
         border: Border(
           bottom: BorderSide(
-            color: isDark
-                ? FluentMicaColors.dividerStrokeDark
-                : FluentMicaColors.dividerStrokeLight,
+            color: Color(0xFF3A3A3A),
             width: 1,
           ),
         ),
       ),
       child: Row(
         children: [
-          // 1. Current Branch Pill
+          // 1. Figma Input/ComboBox: Current Branch
           _BranchPill(
             branch: widget.currentBranch,
             tooltip: 'Active Git Branch: ${widget.currentBranch}',
           ),
 
           const SizedBox(width: 8),
-          _VerticalDivider(isDark: isDark),
-          const SizedBox(width: 8),
 
-          // 2. Sync Now Button
+          // 2. Figma Button/Default: Sync now
           FluentButton(
             onPressed: widget.isSyncing ? null : widget.onSyncNow,
             style: FluentButtonStyle.standard,
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             tooltip: 'Push ${widget.pendingCommitCount} stacked commits to GitHub remote',
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -123,36 +119,35 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
                       child: child,
                     );
                   },
-                  child: Icon(
+                  child: const Icon(
                     Icons.sync_rounded,
                     size: 14,
-                    color: isDark
-                        ? FluentMicaColors.accentLight
-                        : FluentMicaColors.accentDefault,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  widget.isSyncing ? 'Syncing...' : 'Sync Now',
-                  style: const TextStyle(fontSize: 12),
+                  widget.isSyncing ? 'Syncing...' : 'Sync now',
+                  style: const TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
                 ),
                 if (widget.pendingCommitCount > 0) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? FluentMicaColors.accentLight.withOpacity(0.2)
-                          : FluentMicaColors.accentDefault.withOpacity(0.12),
+                      color: const Color(0xFF60CDFF).withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '${widget.pendingCommitCount}',
                       style: FluentTypography.captionStrong.copyWith(
                         fontSize: 10,
-                        color: isDark
-                            ? FluentMicaColors.accentLight
-                            : FluentMicaColors.accentDefault,
+                        color: const Color(0xFF60CDFF),
                       ),
                     ),
                   ),
@@ -163,10 +158,12 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
 
           const SizedBox(width: 8),
 
-          // 3. Refine with AI Button
+          // 3. Figma Button/Primary: Refine with AI
           FluentButton(
             onPressed: widget.isRefining ? null : widget.onRefineWithAi,
             style: FluentButtonStyle.accent,
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             tooltip: 'AI-assisted atomic diff slicing and Conventional Commit generator',
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -177,46 +174,57 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
                     height: 12,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                     ),
                   )
                 else
-                  const Icon(Icons.auto_awesome_rounded, size: 14),
+                  const Icon(Icons.auto_awesome_rounded, size: 14, color: Colors.black),
                 const SizedBox(width: 6),
                 Text(
-                  widget.isRefining ? 'AI Refining Stack...' : 'Refine with AI',
-                  style: const TextStyle(fontSize: 12),
+                  widget.isRefining ? 'AI Refining...' : 'Refine with AI',
+                  style: const TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(width: 12),
-          _VerticalDivider(isDark: isDark),
-          const SizedBox(width: 12),
+          const Spacer(),
 
-          // 4. Auto-Pilot Toggle
+          // 4. Figma Auto-Pilot Label & Switch
+          const Text(
+            'Auto-Pilot',
+            style: TextStyle(
+              fontFamily: FluentTypography.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Color(0xFFB3B3B3),
+            ),
+          ),
+          const SizedBox(width: 8),
           FluentToggleSwitch(
             value: widget.isAutoPilot,
             onChanged: (val) => widget.onAutoPilotChanged?.call(val),
-            label: 'Auto-Pilot',
             tooltip: 'Automatically slice diffs as IDE agents generate code',
           ),
 
-          const Spacer(),
+          const SizedBox(width: 16),
 
           // 5. Overflow Commands ('...')
           _OverflowMenuButton(
             onOpenRebase: widget.onOpenRebase,
             onToggleHud: widget.onToggleHud,
             onOpenSettings: widget.onOpenSettings,
+            onOpenShortcuts: widget.onOpenShortcuts,
           ),
 
           const SizedBox(width: 8),
-          _VerticalDivider(isDark: isDark),
-          const SizedBox(width: 8),
 
-          // 6. Clerk User Profile Pill
+          // 6. User Profile Pill
           _ClerkUserPill(
             userSession: widget.userSession,
             onOpenSettings: widget.onOpenSettings,
@@ -228,7 +236,7 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
   }
 }
 
-/// Active Git Branch pill with fork glyph.
+/// Figma Input/ComboBox: Active Git Branch selector.
 class _BranchPill extends StatelessWidget {
   final String branch;
   final String tooltip;
@@ -237,50 +245,40 @@ class _BranchPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Tooltip(
       message: tooltip,
       child: Container(
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        height: 32,
+        width: 128,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: isDark
-              ? FluentMicaColors.layerBackgroundDark
-              : FluentMicaColors.layerBackgroundLight,
+          color: const Color(0xFF3A3A3A),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: isDark
-                ? FluentMicaColors.cardStrokeDark
-                : FluentMicaColors.cardStrokeLight,
+            color: const Color(0xFF484848),
             width: 1,
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(
-              Icons.fork_right_rounded,
-              size: 14,
-              color: isDark
-                  ? FluentMicaColors.accentLight
-                  : FluentMicaColors.accentIndigo,
-            ),
-            const SizedBox(width: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 140),
+            Expanded(
               child: Text(
                 branch,
-                style: FluentTypography.bodyStrong.copyWith(
-                  fontSize: 11.5,
-                  fontFamily: FluentTypography.monoFamily,
-                  color: isDark
-                      ? FluentMicaColors.textPrimaryDark
-                      : FluentMicaColors.textPrimaryLight,
+                style: const TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 14,
+              color: Color(0xFFB3B3B3),
             ),
           ],
         ),
@@ -469,11 +467,13 @@ class _OverflowMenuButton extends StatelessWidget {
   final VoidCallback? onOpenRebase;
   final VoidCallback? onToggleHud;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenShortcuts;
 
   const _OverflowMenuButton({
     this.onOpenRebase,
     this.onToggleHud,
     this.onOpenSettings,
+    this.onOpenShortcuts,
   });
 
   @override
@@ -516,6 +516,16 @@ class _OverflowMenuButton extends StatelessWidget {
           ),
         ),
         PopupMenuItem(
+          value: 'shortcuts',
+          child: Row(
+            children: [
+              const Icon(Icons.keyboard_outlined, size: 14),
+              const SizedBox(width: 8),
+              Text('Keyboard Shortcuts (Ctrl+/)', style: FluentTypography.body.copyWith(fontSize: 12.5)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
           value: 'settings',
           child: Row(
             children: [
@@ -529,6 +539,7 @@ class _OverflowMenuButton extends StatelessWidget {
       onSelected: (val) {
         if (val == 'rebase') onOpenRebase?.call();
         if (val == 'hud') onToggleHud?.call();
+        if (val == 'shortcuts') onOpenShortcuts?.call();
         if (val == 'settings') onOpenSettings?.call();
       },
       child: Container(
@@ -549,22 +560,6 @@ class _OverflowMenuButton extends StatelessWidget {
               : FluentMicaColors.textPrimaryLight,
         ),
       ),
-    );
-  }
-}
-
-class _VerticalDivider extends StatelessWidget {
-  final bool isDark;
-  const _VerticalDivider({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 18,
-      color: isDark
-          ? FluentMicaColors.dividerStrokeDark
-          : FluentMicaColors.dividerStrokeLight,
     );
   }
 }

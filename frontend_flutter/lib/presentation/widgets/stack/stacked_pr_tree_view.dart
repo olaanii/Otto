@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/theme/typography.dart';
 import '../../../domain/models/atomic_commit_unit.dart';
-import '../../providers/workspace_provider.dart';
 import 'commit_card_item.dart';
 
 /// Vertical tree visualizer depicting the linear stacked PR chain with parent-child lines.
