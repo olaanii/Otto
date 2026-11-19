@@ -115,11 +115,13 @@ type AntigravitySession struct {
 }
 
 type IdeAgentProfile struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	Connected bool   `json:"connected"`
-	Model     string `json:"model,omitempty"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Status           string `json:"status"`
+	Connected        bool   `json:"connected"`
+	Model            string `json:"model,omitempty"`
+	HandshakeToken   string `json:"handshakeToken,omitempty"`
+	PendingWorkspace string `json:"pendingWorkspace,omitempty"`
 }
 
 type AppState struct {
