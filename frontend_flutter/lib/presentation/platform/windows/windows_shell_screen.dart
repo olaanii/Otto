@@ -234,14 +234,25 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               if (path.isNotEmpty) {
                 Navigator.of(ctx).pop();
                 try {
-                  await client.post<Map<String, dynamic>>(
+                  final res = await client.post<Map<String, dynamic>>(
                     ApiEndpoints.workspaceOpen,
-                    data: {'path': path},
+                    data: {'path': path, 'autoInit': true},
                   );
-                  await ref.read(workspaceProvider.notifier).refreshWorkspace();
-                  _showFluentInfoBar(message: 'Workspace opened: $path');
+                  final ok = res.data?['ok'] == true;
+                  if (ok) {
+                    await ref.read(workspaceProvider.notifier).refreshWorkspace();
+                    final isNew = res.data?['isNewRepo'] == true;
+                    _showFluentInfoBar(
+                      message: isNew
+                          ? 'Initialized new Git repository: $path'
+                          : 'Opened workspace: $path',
+                    );
+                  } else {
+                    final err = res.data?['error'] ?? 'Could not open repository';
+                    _showFluentInfoBar(message: '$err', isError: true);
+                  }
                 } catch (e) {
-                  _showFluentInfoBar(message: 'Failed to open repository: $e');
+                  _showFluentInfoBar(message: 'Failed to open repository: $e', isError: true);
                 }
               }
             },
@@ -355,13 +366,13 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
         label: 'Stacked PRs',
         icon: Icons.account_tree_outlined,
         selectedIcon: Icons.account_tree_rounded,
-        badgeCount: workspace.stackGraph.commits.length,
+        badgeCount: workspace.stackGraph.commits.isNotEmpty ? workspace.stackGraph.commits.length : null,
       ),
       FluentNavigationItem(
         label: 'Diff Viewer',
         icon: Icons.difference_outlined,
         selectedIcon: Icons.difference_rounded,
-        badgeCount: workspace.uncommittedDiffs.length,
+        badgeCount: workspace.uncommittedDiffs.isNotEmpty ? workspace.uncommittedDiffs.length : null,
       ),
       FluentNavigationItem(
         label: 'Rebase Playground',
@@ -374,7 +385,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
         label: 'AI Agents',
         icon: Icons.smart_toy_outlined,
         selectedIcon: Icons.smart_toy_rounded,
-        badgeCount: workspace.activeAgents.where((a) => a.isActive).length,
+        badgeCount: workspace.activeAgents.where((a) => a.isActive).isNotEmpty
+            ? workspace.activeAgents.where((a) => a.isActive).length
+            : null,
         badgeColor: FluentMicaColors.gitAdded,
       ),
     ];
@@ -1690,11 +1703,24 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                FluentButton(
-                  onPressed: () => ref.read(workspaceProvider.notifier).refreshWorkspace(),
-                  style: FluentButtonStyle.standard,
-                  height: 32,
-                  child: const Text('Check for Changes'),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    FluentButton(
+                      onPressed: () => ref.read(workspaceProvider.notifier).refreshWorkspace(),
+                      style: FluentButtonStyle.standard,
+                      height: 32,
+                      child: const Text('Check for Changes'),
+                    ),
+                    FluentButton(
+                      onPressed: _handleOpenRepository,
+                      style: FluentButtonStyle.accent,
+                      height: 32,
+                      child: const Text('Open Project Folder...'),
+                    ),
+                  ],
                 ),
               ],
             ),
