@@ -110,7 +110,7 @@ func TestAntigravityConnectAndStatusEndpoints(t *testing.T) {
 	_, mux := setupTestServer(t)
 
 	// Test POST /api/antigravity/connect
-	connectPayload := []byte(`{"email":"olaaniiishaambal@gmail.com","name":"Olani Shambel","authProvider":"google"}`)
+	connectPayload := []byte(`{"email":"developer@otto.dev","name":"Otto Developer","authProvider":"google"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/antigravity/connect", bytes.NewReader(connectPayload))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -127,8 +127,33 @@ func TestAntigravityConnectAndStatusEndpoints(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &connResp); err != nil {
 		t.Fatalf("Failed to parse connect response: %v", err)
 	}
-	if !connResp.Connected || connResp.Antigravity.User.Email != "olaaniiishaambal@gmail.com" {
+	if !connResp.Connected || connResp.Antigravity.User.Email != "developer@otto.dev" {
 		t.Errorf("Unexpected connect response: %+v", connResp)
+	}
+
+	// Test POST /api/antigravity/connect with empty payload (rejection of unauthenticated empty connects)
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/api/antigravity/connect", bytes.NewReader([]byte(`{}`)))
+	recEmpty := httptest.NewRecorder()
+	mux.ServeHTTP(recEmpty, reqEmpty)
+
+	if recEmpty.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/antigravity/connect with empty payload should return 400, got %d", recEmpty.Code)
+	}
+
+	// Test GET /auth/login (OAuth initialization)
+	reqLogin := httptest.NewRequest(http.MethodGet, "/auth/login?format=json", nil)
+	recLogin := httptest.NewRecorder()
+	mux.ServeHTTP(recLogin, reqLogin)
+	if recLogin.Code != http.StatusOK {
+		t.Fatalf("GET /auth/login returned %d", recLogin.Code)
+	}
+
+	// Test GET /auth/callback (Loopback browser redirect handler)
+	reqCallback := httptest.NewRequest(http.MethodGet, "/auth/callback?email=oauth-user@otto.dev&name=OAuth+User&provider=google", nil)
+	recCallback := httptest.NewRecorder()
+	mux.ServeHTTP(recCallback, reqCallback)
+	if recCallback.Code != http.StatusOK {
+		t.Fatalf("GET /auth/callback returned %d", recCallback.Code)
 	}
 
 	// Test GET /api/antigravity/status
@@ -205,5 +230,48 @@ func TestAntigravityTestConnectionEndpoint(t *testing.T) {
 	}
 	if resp["guardrailsVerified"] != true {
 		t.Errorf("Expected guardrailsVerified: true, got %v", resp["guardrailsVerified"])
+	}
+}
+
+func TestAuthSessionAndCallbackFlow(t *testing.T) {
+	server, mux := setupTestServer(t)
+
+	// 1. Initial state: unauthenticated
+	reqSession := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	recSession := httptest.NewRecorder()
+	mux.ServeHTTP(recSession, reqSession)
+	if recSession.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected /auth/session to return 401 when disconnected, got %d", recSession.Code)
+	}
+
+	// 2. Callback with email establishes session
+	reqCb := httptest.NewRequest(http.MethodGet, "/auth/callback?email=user@domain.com&name=Test+User", nil)
+	recCb := httptest.NewRecorder()
+	mux.ServeHTTP(recCb, reqCb)
+	if recCb.Code != http.StatusOK {
+		t.Fatalf("Expected /auth/callback to return 200, got %d", recCb.Code)
+	}
+
+	// 3. Verify /auth/session is now authenticated
+	recSession2 := httptest.NewRecorder()
+	mux.ServeHTTP(recSession2, reqSession)
+	if recSession2.Code != http.StatusOK {
+		t.Fatalf("Expected /auth/session to return 200, got %d", recSession2.Code)
+	}
+	var sessResp map[string]any
+	_ = json.Unmarshal(recSession2.Body.Bytes(), &sessResp)
+	if sessResp["authenticated"] != true {
+		t.Errorf("Expected authenticated: true, got %v", sessResp["authenticated"])
+	}
+
+	// 4. Test /auth/signout
+	reqSignOut := httptest.NewRequest(http.MethodPost, "/auth/signout", nil)
+	recSignOut := httptest.NewRecorder()
+	mux.ServeHTTP(recSignOut, reqSignOut)
+	if recSignOut.Code != http.StatusOK {
+		t.Fatalf("Expected /auth/signout to return 200, got %d", recSignOut.Code)
+	}
+	if server.antigravity.Connected {
+		t.Errorf("Expected Connected: false after signout")
 	}
 }

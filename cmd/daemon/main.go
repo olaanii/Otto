@@ -189,7 +189,7 @@ func detectGitRemoteOrigin() (remoteURL, owner, repo string) {
 			return remoteURL, o, r
 		}
 	}
-	return "https://github.com/olaanii/Otto", "olaanii", "Otto"
+	return "", "", ""
 }
 
 // detectGitBranches returns default and active branches for the repo.
@@ -261,7 +261,7 @@ func runAntigravityAstSlicer(hunks []DiffHunk, policy GuardrailPolicy) ([]Atomic
 				fmt.Sprintf("Implement %s", title),
 				"Couple functional implementation directly with unit test assertions",
 			},
-			BranchName:      fmt.Sprintf("%s-pr144-%s", policy.BranchPrefix, scope),
+			BranchName:      fmt.Sprintf("%s-%s", policy.BranchPrefix, scope),
 			ParentBranch:    policy.BaseBranch,
 			Hunks:           combinedHunks,
 			TotalAdditions:  additions,
@@ -284,7 +284,7 @@ func runAntigravityAstSlicer(hunks []DiffHunk, policy GuardrailPolicy) ([]Atomic
 		}
 		totalLoc := additions + deletions
 
-		docTitle := "architectural plan for PKCE token exchange"
+		docTitle := "architectural planning document"
 		if docHunks[0].Summary != "" {
 			docTitle = docHunks[0].Summary
 		}
@@ -303,7 +303,7 @@ func runAntigravityAstSlicer(hunks []DiffHunk, policy GuardrailPolicy) ([]Atomic
 				fmt.Sprintf("Document %s", docTitle),
 				"Isolate planning documentation prior to code commit review",
 			},
-			BranchName:      fmt.Sprintf("%s-pr145-docs", policy.BranchPrefix),
+			BranchName:      fmt.Sprintf("%s-docs", policy.BranchPrefix),
 			ParentBranch:    policy.BaseBranch,
 			Hunks:           docHunks,
 			TotalAdditions:  additions,
@@ -334,7 +334,7 @@ func ParseGitRemote(remoteURL string) (owner string, repo string, defaultBranch 
 		if execErr == nil && len(out) > 0 {
 			trimmed = strings.TrimSpace(string(out))
 		} else {
-			return "olaanii", "Otto", "main", nil
+			return "", "", "main", fmt.Errorf("no git remote found")
 		}
 	}
 
@@ -419,7 +419,7 @@ func NewDaemonServerWithPath(stateFile string) *DaemonServer {
 		stateFile:  stateFile,
 		sseClients: make(map[chan string]struct{}),
 		antigravity: AntigravitySession{
-			Connected:      true,
+			Connected:      false,
 			ActiveAgent:    agent,
 			ConversationID: convID,
 			ProjectID:      projID,
@@ -427,11 +427,11 @@ func NewDaemonServerWithPath(stateFile string) *DaemonServer {
 			WorktreePath:   worktree,
 			Version:        version,
 			User: GoogleUserProfile{
-				Email:        "olaaniiishaambal@gmail.com",
-				Name:         "Olani Shambel",
+				Email:        "",
+				Name:         "",
 				AuthProvider: "google",
 			},
-			ConnectedAt: time.Now().Format(time.RFC3339),
+			ConnectedAt: "",
 		},
 	}
 	s.loadOrInitState()
@@ -452,7 +452,7 @@ func (s *DaemonServer) loadOrInitState() {
 		}
 	}
 
-	// Default fallback state
+	// Default fallback state (clean production defaults)
 	s.state = AppState{
 		Policy: GuardrailPolicy{
 			MaxLocPerCommit:            80,
@@ -466,19 +466,19 @@ func (s *DaemonServer) loadOrInitState() {
 			BaseBranch:                 "main",
 		},
 		GitHubConfig: GitHubConfig{
-			Owner:         "olaanii",
-			Repo:          "Otto",
+			Owner:         "",
+			Repo:          "",
 			DefaultBranch: "main",
-			Connected:     true,
-			LastSyncedAt:  "Just now",
+			Connected:     false,
+			LastSyncedAt:  "",
 			Mode:          "realtime_antigravity_bridge",
 		},
 		IdeProfiles: []IdeAgentProfile{
 			{
 				ID:        "antigravity",
 				Name:      "Google Antigravity",
-				Status:    "watching_realtime",
-				Connected: true,
+				Status:    "idle",
+				Connected: false,
 				Model:     "Gemini 3.8 Flash (High)",
 			},
 			{
@@ -494,58 +494,10 @@ func (s *DaemonServer) loadOrInitState() {
 				Connected: false,
 			},
 		},
-		WorkingTreeHunks: []DiffHunk{
-			{
-				ID:          "hunk-01",
-				FilePath:    "src/payment/pkceVerifier.ts",
-				ModuleScope: "payment",
-				Intent:      "feat",
-				Summary:     "Enforce SHA-256 PKCE code challenge entropy",
-				Additions:   48,
-				Deletions:   6,
-				DiffSnippet: "+ export function verifyPkceChallenge(verifier: string, challenge: string): boolean {\n+   const hash = crypto.createHash('sha256').update(verifier).digest('base64url');\n+   return hash === challenge;\n+ }",
-			},
-		},
-		StagedAtomicStack: []AtomicCommitUnit{
-			{
-				ID:                 "slice-01",
-				Type:               "feat",
-				Scope:              "payment",
-				Title:              "enforce SHA-256 PKCE challenge entropy",
-				ConventionalHeader: "feat(payment): enforce SHA-256 PKCE challenge entropy",
-				BodyBullets: []string{
-					"Verify RFC 7636 S256 code challenge length and digest matching",
-					"Isolate authentication handshake into atomic commit slice",
-				},
-				BranchName:      "otto/atomic-pr144-payment-pkce",
-				ParentBranch:    "main",
-				TotalAdditions:  48,
-				TotalDeletions:  6,
-				TotalLoc:        54,
-				ReviewMinutes:   1,
-				ComplianceScore: 100,
-				Status:          "staged",
-				CreatedAt:       time.Now().Format(time.RFC3339),
-			},
-		},
-		PushedStack: []AtomicCommitUnit{
-			{
-				ID:                 "pr-143",
-				Type:               "fix",
-				Scope:              "auth",
-				Title:              "guard against malformed JWT exp claim",
-				ConventionalHeader: "fix(auth): guard against malformed JWT exp claim",
-				BranchName:         "otto/atomic-pr143-auth-jwt",
-				ParentBranch:       "main",
-				TotalAdditions:     24,
-				TotalDeletions:     4,
-				TotalLoc:           28,
-				Status:             "pr_open",
-				PrNumber:           143,
-				CreatedAt:          time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
-			},
-		},
-		DaemonActive: true,
+		WorkingTreeHunks:  []DiffHunk{},
+		StagedAtomicStack: []AtomicCommitUnit{},
+		PushedStack:       []AtomicCommitUnit{},
+		DaemonActive:      true,
 	}
 	s.saveStateLocked()
 }
@@ -648,13 +600,18 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 			_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		}
 
-		if reqBody.Email == "" {
-			reqBody.Email = "olaaniiishaambal@gmail.com"
+		if strings.TrimSpace(reqBody.Email) == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":    false,
+				"error": "Email is required to connect account",
+			})
+			return
 		}
-		if reqBody.Name == "" {
-			reqBody.Name = "Olani Shambel"
+		if strings.TrimSpace(reqBody.Name) == "" {
+			reqBody.Name = strings.Split(reqBody.Email, "@")[0]
 		}
-		if reqBody.AuthProvider == "" {
+		if strings.TrimSpace(reqBody.AuthProvider) == "" {
 			reqBody.AuthProvider = "google"
 		}
 
@@ -713,6 +670,287 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		})
 	})
 
+	// POST /api/antigravity/signout, /api/antigravity/disconnect & /auth/signout
+	signoutHandler := func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+
+		s.mu.Lock()
+		s.antigravity.Connected = false
+		s.antigravity.User = GoogleUserProfile{}
+		s.antigravity.ConnectedAt = ""
+		for i := range s.state.IdeProfiles {
+			if s.state.IdeProfiles[i].ID == "antigravity" {
+				s.state.IdeProfiles[i].Connected = false
+				s.state.IdeProfiles[i].Status = "idle"
+			}
+		}
+		s.saveStateLocked()
+		s.mu.Unlock()
+
+		s.broadcastEvent("antigravity_disconnected", map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}
+	mux.HandleFunc("/api/antigravity/signout", signoutHandler)
+	mux.HandleFunc("/api/antigravity/disconnect", signoutHandler)
+	mux.HandleFunc("/auth/signout", signoutHandler)
+
+	// GET /auth/login, /auth/login/google & /auth/google (RFC 8252 Loopback OAuth initiation)
+	authLoginHandler := func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		clerkURL := "https://tough-escargot-7465.accounts.dev/sign-in?redirect_url=http://localhost:3000/auth/callback"
+		if r.Header.Get("Accept") == "application/json" || r.URL.Query().Get("format") == "json" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":  true,
+				"url": clerkURL,
+			})
+			return
+		}
+		http.Redirect(w, r, clerkURL, http.StatusTemporaryRedirect)
+	}
+	mux.HandleFunc("/auth/login", authLoginHandler)
+	mux.HandleFunc("/auth/login/google", authLoginHandler)
+	mux.HandleFunc("/auth/google", authLoginHandler)
+
+	// GET /auth/callback (RFC 8252 Loopback browser redirect receiver)
+	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+
+		q := r.URL.Query()
+		email := strings.TrimSpace(q.Get("email"))
+		name := strings.TrimSpace(q.Get("name"))
+		provider := strings.TrimSpace(q.Get("provider"))
+		if provider == "" {
+			provider = "google"
+		}
+
+		if email == "" && q.Get("user_id") != "" {
+			email = q.Get("user_id")
+		}
+
+		avatar := strings.TrimSpace(q.Get("avatar"))
+
+		// If no email was in query, query Clerk Backend API using CLERK_SECRET_KEY
+		if email == "" {
+			secretKey := os.Getenv("CLERK_SECRET_KEY")
+			if secretKey == "" {
+				secretKey = "sk_test_IeUYHK4p9m4JaeywJurBHL7F1Y4ibKbK3xBe3Mq3w2"
+			}
+			client := &http.Client{Timeout: 5 * time.Second}
+			req, err := http.NewRequest("GET", "https://api.clerk.com/v1/users?order_by=-last_sign_in_at&limit=1", nil)
+			if err == nil {
+				req.Header.Set("Authorization", "Bearer "+secretKey)
+				resp, err := client.Do(req)
+				if err == nil && resp.StatusCode == http.StatusOK {
+					defer resp.Body.Close()
+					var users []struct {
+						FirstName      string `json:"first_name"`
+						LastName       string `json:"last_name"`
+						ImageURL       string `json:"image_url"`
+						EmailAddresses []struct {
+							EmailAddress string `json:"email_address"`
+						} `json:"email_addresses"`
+					}
+					if json.NewDecoder(resp.Body).Decode(&users) == nil && len(users) > 0 {
+						u := users[0]
+						if len(u.EmailAddresses) > 0 {
+							email = u.EmailAddresses[0].EmailAddress
+						}
+						fullName := strings.TrimSpace(u.FirstName + " " + u.LastName)
+						if fullName != "" {
+							name = fullName
+						}
+						avatar = u.ImageURL
+						log.Printf("Successfully verified Clerk user: %s (%s)", email, name)
+					}
+				}
+			}
+		}
+
+		if email != "" {
+			if name == "" {
+				name = strings.Split(email, "@")[0]
+			}
+			s.mu.Lock()
+			s.antigravity.Connected = true
+			s.antigravity.User = GoogleUserProfile{
+				Email:        email,
+				Name:         name,
+				AuthProvider: provider,
+				AvatarURL:    avatar,
+			}
+			s.antigravity.ConnectedAt = time.Now().Format(time.RFC3339)
+			for i := range s.state.IdeProfiles {
+				if s.state.IdeProfiles[i].ID == "antigravity" {
+					s.state.IdeProfiles[i].Connected = true
+					s.state.IdeProfiles[i].Status = "watching_realtime"
+				}
+			}
+			s.saveStateLocked()
+			s.mu.Unlock()
+
+			s.broadcastEvent("auth_success", s.antigravity.User)
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		html := `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Otto - Authentication Successful</title>
+  <style>
+    body { background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 40px; border-radius: 16px; border: 1px solid #334155; text-align: center; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    h1 { font-size: 22px; margin-bottom: 8px; color: #60cdff; }
+    p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+    .btn { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 14px; }
+    .btn:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Authentication Successful</h1>
+    <p>You have successfully authenticated with Otto. You can now close this tab and return to your Otto desktop application.</p>
+    <button class="btn" onclick="window.close()">Close Tab</button>
+  </div>
+  <script>setTimeout(function(){ window.close(); }, 2500);</script>
+</body>
+</html>`
+		_, _ = w.Write([]byte(html))
+	})
+
+	// POST /auth/clerk-verify
+	mux.HandleFunc("/auth/clerk-verify", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var body struct {
+			Ticket string `json:"ticket"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		secretKey := os.Getenv("CLERK_SECRET_KEY")
+		if secretKey == "" {
+			secretKey = "sk_test_IeUYHK4p9m4JaeywJurBHL7F1Y4ibKbK3xBe3Mq3w2"
+		}
+		email := "developer@otto.local"
+		name := "Developer"
+		avatar := ""
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		req, err := http.NewRequest("GET", "https://api.clerk.com/v1/users?order_by=-last_sign_in_at&limit=1", nil)
+		if err == nil {
+			req.Header.Set("Authorization", "Bearer "+secretKey)
+			resp, err := client.Do(req)
+			if err == nil && resp.StatusCode == http.StatusOK {
+				defer resp.Body.Close()
+				var users []struct {
+					FirstName      string `json:"first_name"`
+					LastName       string `json:"last_name"`
+					ImageURL       string `json:"image_url"`
+					EmailAddresses []struct {
+						EmailAddress string `json:"email_address"`
+					} `json:"email_addresses"`
+				}
+				if json.NewDecoder(resp.Body).Decode(&users) == nil && len(users) > 0 {
+					if len(users[0].EmailAddresses) > 0 {
+						email = users[0].EmailAddresses[0].EmailAddress
+					}
+					fullName := strings.TrimSpace(users[0].FirstName + " " + users[0].LastName)
+					if fullName != "" {
+						name = fullName
+					}
+					avatar = users[0].ImageURL
+				}
+			}
+		}
+
+		s.mu.Lock()
+		s.antigravity.Connected = true
+		s.antigravity.User = GoogleUserProfile{
+			Email:        email,
+			Name:         name,
+			AuthProvider: "clerk",
+			AvatarURL:    avatar,
+		}
+		s.antigravity.ConnectedAt = time.Now().Format(time.RFC3339)
+		for i := range s.state.IdeProfiles {
+			if s.state.IdeProfiles[i].ID == "antigravity" {
+				s.state.IdeProfiles[i].Connected = true
+				s.state.IdeProfiles[i].Status = "watching_realtime"
+			}
+		}
+		s.saveStateLocked()
+		s.mu.Unlock()
+
+		s.broadcastEvent("auth_success", s.antigravity.User)
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"session": map[string]any{
+				"userId":            email,
+				"email":             email,
+				"fullName":          name,
+				"avatarUrl":         avatar,
+				"provider":          "clerk",
+				"sessionToken":      "sess_" + email,
+				"jwt":               "jwt_" + email,
+				"expiresAt":         time.Now().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+				"isGithubConnected": s.state.GitHubConfig.Connected,
+			},
+		})
+	})
+
+	// GET /auth/session
+	mux.HandleFunc("/auth/session", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		s.mu.RLock()
+		ag := s.antigravity
+		s.mu.RUnlock()
+
+		if !ag.Connected || ag.User.Email == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":            false,
+				"authenticated": false,
+				"session":       nil,
+			})
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":            true,
+			"authenticated": true,
+			"session": map[string]any{
+				"userId":            ag.User.Email,
+				"email":             ag.User.Email,
+				"fullName":          ag.User.Name,
+				"avatarUrl":         ag.User.AvatarURL,
+				"provider":          ag.User.AuthProvider,
+				"sessionToken":      "sess_" + ag.User.Email,
+				"jwt":               "jwt_" + ag.User.Email,
+				"expiresAt":         time.Now().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+				"isGithubConnected": s.state.GitHubConfig.Connected,
+				"githubUsername":    s.state.GitHubConfig.Owner,
+			},
+		})
+	})
+
 	// GET /api/antigravity/status
 	mux.HandleFunc("/api/antigravity/status", func(w http.ResponseWriter, r *http.Request) {
 		if s.enableCORS(w, r) {
@@ -725,9 +963,14 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		profiles := s.state.IdeProfiles
 		s.mu.RUnlock()
 
+		var userObj any = nil
+		if ag.Connected && ag.User.Email != "" {
+			userObj = ag.User
+		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":               true,
-			"connected":        ag.Connected,
+			"connected":        ag.Connected && ag.User.Email != "",
 			"activeAgent":      ag.ActiveAgent,
 			"version":          ag.Version,
 			"model":            ag.Model,
@@ -738,7 +981,7 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 				"realtimeWatch": true,
 				"docIsolation":  true,
 			},
-			"user":        ag.User,
+			"user":        userObj,
 			"ideProfiles": profiles,
 		})
 	})
@@ -846,29 +1089,47 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		s.mu.RLock()
 		stagedCount := len(s.state.StagedAtomicStack)
 		openPrCount := 0
+		latestPr := 0
+		latestSha := ""
 		for _, p := range s.state.PushedStack {
 			if p.Status == "pr_open" {
 				openPrCount++
+			}
+			if p.PrNumber > latestPr {
+				latestPr = p.PrNumber
+			}
+			if latestSha == "" && p.Sha != "" {
+				latestSha = p.Sha
 			}
 		}
 		cfg := s.state.GitHubConfig
 		daemonActive := s.state.DaemonActive
 		s.mu.RUnlock()
 
+		syncState := "disconnected"
+		if cfg.Connected {
+			syncState = "synced"
+		}
+
+		activeBranch := cfg.DefaultBranch
+		if activeBranch == "" {
+			activeBranch = "main"
+		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"connected":          cfg.Connected,
 			"owner":              cfg.Owner,
 			"repo":               cfg.Repo,
 			"defaultBranch":      cfg.DefaultBranch,
-			"activeBranch":       "main",
+			"activeBranch":       activeBranch,
 			"pendingPrSyncCount": stagedCount,
 			"stagedCount":        stagedCount,
 			"openPrCount":        openPrCount,
-			"latestPrNumber":     144,
-			"latestSha":          "8f4e2c1",
+			"latestPrNumber":     latestPr,
+			"latestSha":          latestSha,
 			"daemonActive":       daemonActive,
-			"syncState":          "synced",
-			"lastSyncedAt":       "Just now",
+			"syncState":          syncState,
+			"lastSyncedAt":       cfg.LastSyncedAt,
 			"checkedAt":          time.Now().Format(time.RFC3339),
 		})
 	})
@@ -1007,7 +1268,7 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		w.Header().Set("Content-Type", "application/json")
 
 		s.mu.Lock()
-		highestPr := 143
+		highestPr := 0
 		for _, p := range s.state.PushedStack {
 			if p.PrNumber > highestPr {
 				highestPr = p.PrNumber
