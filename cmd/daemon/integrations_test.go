@@ -21,10 +21,10 @@ func TestIntegrationsWorkspaceEndpoints(t *testing.T) {
 		t.Errorf("Expected ok: false for non-existent directory, got %v", resp)
 	}
 
-	// 2. POST /api/workspace/open with real non-git folder (auto-init)
+	// 2. POST /api/workspace/open with real non-git folder (auto-init) with Windows quotes
 	tmpDir := t.TempDir()
 	initPayload, _ := json.Marshal(map[string]any{
-		"path":     tmpDir,
+		"path":     "\"" + tmpDir + "\"",
 		"autoInit": true,
 	})
 	reqInit := httptest.NewRequest(http.MethodPost, "/api/workspace/open", bytes.NewReader(initPayload))

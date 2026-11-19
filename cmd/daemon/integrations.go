@@ -34,7 +34,8 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 			return
 		}
 
-		cleanPath := filepath.Clean(strings.TrimSpace(body.Path))
+		rawPath := strings.Trim(strings.TrimSpace(body.Path), "\"'`")
+		cleanPath := filepath.Clean(rawPath)
 		fi, statErr := os.Stat(cleanPath)
 		if statErr != nil || !fi.IsDir() {
 			w.WriteHeader(http.StatusOK)
