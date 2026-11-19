@@ -10,4 +10,7 @@ coverage/
 .bun-cache/
 .pub-cache/
 .npm-cache/
+*.exe
+Otto.cmd
+package-lock.json
 

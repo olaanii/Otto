@@ -21,8 +21,8 @@ export const INITIAL_POLICY: GuardrailPolicy = {
 };
 
 export const INITIAL_GITHUB_CONFIG: GitHubConnectionConfig = {
-  owner: 'olaniketema',
-  repo: 'antigravity-core-platform',
+  owner: 'olaanii',
+  repo: 'Otto',
   defaultBranch: 'main',
   connected: true,
   lastSyncedAt: '2026-11-06T04:55:00.000Z',
@@ -32,9 +32,9 @@ export const INITIAL_GITHUB_CONFIG: GitHubConnectionConfig = {
 export const INITIAL_IDE_PROFILES: IdeAgentProfile[] = [
   {
     id: 'antigravity',
-    name: 'Antigravity IDE',
+    name: 'Google Antigravity',
     kind: 'IDE Extension Overlay',
-    activeTaskTitle: 'Stripe webhook signature verifier & HMAC timing guard',
+    activeTaskTitle: 'Listening for real-time worktree edits & agent prompts...',
     filesInFlight: 3,
     autoCommittedToday: 5,
     prsCreatedToday: 2,

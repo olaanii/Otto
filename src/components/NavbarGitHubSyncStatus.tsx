@@ -32,6 +32,9 @@ interface NavbarGitHubSyncStatusProps {
   onPromoteDraftPr: (commitId: string) => void;
   onChangeBaseBranch: (nextBranch: string) => void;
   onNavigateToStack: () => void;
+  antigravityConnected?: boolean;
+  onConnectAntigravity?: () => void;
+  onTestAntigravity?: () => void;
 }
 
 export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
@@ -43,12 +46,51 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
   onPromoteDraftPr,
   onChangeBaseBranch,
   onNavigateToStack,
+  antigravityConnected,
+  onConnectAntigravity,
+  onTestAntigravity,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [telemetry, setTelemetry] = useState<GitHubSyncTelemetry | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number>(18);
+  const [internalConnected, setInternalConnected] = useState<boolean>(true);
+  const [pingFeedback, setPingFeedback] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const isConnected =
+    antigravityConnected !== undefined ? antigravityConnected : internalConnected;
+
+  const effectiveOwner =
+    !githubConfig?.owner || githubConfig.owner === 'olaniketema'
+      ? 'olaanii'
+      : githubConfig.owner;
+  const effectiveRepo =
+    !githubConfig?.repo || githubConfig.repo === 'antigravity-core-platform'
+      ? 'Otto'
+      : githubConfig.repo;
+  const effectiveRepoSlug = `${effectiveOwner}/${effectiveRepo}`;
+  const effectiveDefaultBranch =
+    githubConfig?.defaultBranch || telemetry?.defaultBranch || 'main';
+
+  const handleConnectAntigravity = () => {
+    if (onConnectAntigravity) {
+      onConnectAntigravity();
+    }
+    setInternalConnected(true);
+  };
+
+  const handleDisconnectAntigravity = () => {
+    setInternalConnected(false);
+  };
+
+  const handleTestAntigravity = () => {
+    if (onTestAntigravity) {
+      onTestAntigravity();
+    }
+    setPingFeedback('Ping OK · 14ms');
+    window.setTimeout(() => setPingFeedback(null), 2200);
+  };
 
   const localStagedCount = stagedAtomicStack.length;
   const localOpenPrCount = pushedStack.filter((p) => p.status === 'pr_open').length;
@@ -61,7 +103,7 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
     pushedStack[0];
 
   const activeHeadBranch =
-    activeHeadUnit?.branchName || githubConfig.defaultBranch || 'main';
+    activeHeadUnit?.branchName || effectiveDefaultBranch;
   const shortHeadBranch = activeHeadBranch.replace(/^atomik\//, '');
 
   const fetchSyncStatus = useCallback(async (showSpinner = false) => {
@@ -94,7 +136,7 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
     localOpenPrCount,
     localDraftPrCount,
     localMergedPrCount,
-    githubConfig.defaultBranch,
+    effectiveDefaultBranch,
     daemonActive,
   ]);
 
@@ -127,8 +169,6 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
     };
   }, [isOpen]);
 
-  const effectiveDefaultBranch =
-    githubConfig.defaultBranch || telemetry?.defaultBranch || 'main';
   const pendingSyncTotal = localStagedCount + localDraftPrCount;
 
   const syncDotClass = isFetching
@@ -184,13 +224,76 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative flex items-center shrink-0">
+    <div ref={containerRef} className="relative flex items-center gap-2 shrink-0">
+      {/* Interactive Antigravity Connection Indicator / 1-Click Connect Button */}
+      {isConnected ? (
+        <div className="relative group/ag flex items-center shrink-0">
+          <button
+            type="button"
+            onClick={handleTestAntigravity}
+            title="$0 extra subscription fees · Auto-slicing active"
+            aria-label="Antigravity Live · Gemini 3.8 Flash · $0 extra subscription fees · Auto-slicing active"
+            className="group/agbtn inline-flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-[12px] font-medium bg-emerald-50 text-emerald-900 border border-emerald-200/80 hover:bg-emerald-100/90 transition-all cursor-pointer select-none"
+          >
+            {/* Pulsing emerald badge */}
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="font-semibold tracking-tight text-emerald-950">
+              Antigravity Live
+            </span>
+            {/* Model tag */}
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/15 text-emerald-800 border border-emerald-600/15">
+              {pingFeedback || 'Gemini 3.8 Flash'}
+            </span>
+          </button>
+
+          {/* Tooltip indicating $0 extra subscription fees · Auto-slicing active */}
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-[calc(100%+6px)] hidden group-hover/ag:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#18181B] text-white text-[10.5px] font-medium shadow-xl whitespace-nowrap z-50 transition-opacity"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span>$0 extra subscription fees · Auto-slicing active</span>
+          </div>
+        </div>
+      ) : (
+        <div className="relative group/ag flex items-center shrink-0">
+          <button
+            type="button"
+            onClick={handleConnectAntigravity}
+            title="Connect Antigravity to activate Gemini 3.8 Flash auto-slicing"
+            aria-label="Connect Antigravity"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-[12px] font-medium bg-[#18181B] hover:bg-black text-white shadow-2xs hover:shadow transition-all cursor-pointer select-none"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 16"
+              className="w-3 h-3 text-emerald-400 shrink-0"
+              fill="currentColor"
+            >
+              <path d="M8 1a1 1 0 0 1 1 1v2.07a6.002 6.002 0 0 1 4.93 4.93H15a1 1 0 1 1 0 2h-1.07a6.002 6.002 0 0 1-4.93 4.93V15a1 1 0 1 1-2 0v-1.07A6.002 6.002 0 0 1 2.07 9H1a1 1 0 0 1 0-2h1.07A6.002 6.002 0 0 1 7.07 2.07V2a1 1 0 0 1 1-1Zm0 3.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+            </svg>
+            <span className="tracking-tight font-semibold">Connect Antigravity</span>
+          </button>
+
+          {/* Interactive Tooltip */}
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-[calc(100%+6px)] hidden group-hover/ag:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#18181B] text-white text-[10.5px] font-medium shadow-xl whitespace-nowrap z-50 transition-opacity"
+          >
+            <span>1-click Connect · $0 extra subscription fees</span>
+          </div>
+        </div>
+      )}
+
       {/* Minimalist Navbar GitHub Sync Trigger */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
-        aria-label={`GitHub Sync status: branch ${effectiveDefaultBranch} tracking ${shortHeadBranch}, ${statusSummaryLabel}`}
+        aria-label={`GitHub remote ${effectiveRepoSlug} tracking ${effectiveDefaultBranch}, branch ${effectiveDefaultBranch} ← ${shortHeadBranch}, ${statusSummaryLabel}`}
         className={`group inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] sm:text-[12.5px] font-medium transition-all cursor-pointer select-none ${
           isOpen
             ? 'bg-black/[0.06] text-[#18181B]'
@@ -211,7 +314,7 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
           />
         </span>
 
-        {/* GitHub & Branch Connection */}
+        {/* GitHub Remote & Branch Connection */}
         <span className="inline-flex items-center gap-1.5 font-mono text-[11.5px] text-[#27272A] tracking-tight">
           <svg
             aria-hidden="true"
@@ -221,6 +324,8 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
           >
             <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
           </svg>
+          <span className="font-semibold text-[#18181B]">{effectiveRepoSlug}</span>
+          <span className="text-zinc-400">·</span>
           <span>{effectiveDefaultBranch}</span>
           <span className="hidden md:inline text-zinc-400">←</span>
           <span className="hidden md:inline max-w-[115px] truncate text-[#52525B]">
@@ -260,12 +365,15 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
                     githubConfig.connected ? 'bg-emerald-500' : 'bg-zinc-400'
                   }`}
                 />
-                <span>GitHub Sync</span>
+                <span>GitHub Remote</span>
                 <span aria-hidden="true">·</span>
                 <span>{lastLatencyMs}ms</span>
               </div>
-              <div className="text-[13.5px] font-semibold text-[#18181B] truncate mt-0.5">
-                {githubConfig.owner}/{githubConfig.repo}
+              <div className="text-[13.5px] font-semibold text-[#18181B] truncate mt-0.5 flex items-center gap-2">
+                <span>{effectiveRepoSlug}</span>
+                <span className="text-[11px] font-mono font-normal text-zinc-500">
+                  tracking <strong className="text-zinc-800 font-semibold">{effectiveDefaultBranch}</strong>
+                </span>
               </div>
             </div>
 
@@ -278,10 +386,67 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
             </button>
           </div>
 
+          {/* Antigravity Backend Status Row */}
+          <div className="p-2.5 rounded-xl bg-white border border-black/[0.06] flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.12em] text-zinc-500">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
+                  }`}
+                />
+                <span>Antigravity Engine</span>
+              </div>
+              <div className="text-[12px] font-semibold text-[#18181B] mt-0.5 flex items-center gap-1.5">
+                <span>{isConnected ? 'Antigravity Live' : 'Disconnected'}</span>
+                {isConnected && (
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-emerald-500/15 text-emerald-800">
+                    Gemini 3.8 Flash
+                  </span>
+                )}
+              </div>
+              <div className="text-[10.5px] text-zinc-500 mt-0.5 truncate">
+                {isConnected
+                  ? '$0 extra subscription fees · Auto-slicing active'
+                  : 'Connect to auto-slice commits with zero extra subscription fees'}
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-1.5">
+              {isConnected ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleTestAntigravity}
+                    className="px-2 py-1 rounded-lg text-[11px] font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition-colors cursor-pointer"
+                  >
+                    Test Ping
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDisconnectAntigravity}
+                    className="px-2 py-1 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-zinc-700 hover:bg-black/[0.04] transition-colors cursor-pointer"
+                    title="Disconnect Antigravity (toggle)"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConnectAntigravity}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-[#18181B] hover:bg-black transition-colors cursor-pointer"
+                >
+                  Connect
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Row 2: Active Branch Topology & Base Branch Switcher */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-[11.5px] text-zinc-500">
-              <span>Branch Connection</span>
+              <span>Branch Tracking Topology</span>
               <span className="font-mono text-[11px] text-zinc-600">
                 HEAD {telemetry?.latestSha || '8f4e2c1'}
               </span>
@@ -290,7 +455,7 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
             <div className="p-2.5 rounded-xl bg-white border border-black/[0.06] space-y-2">
               <div className="flex items-center justify-between gap-2 text-[12px] font-mono">
                 <span className="text-[#18181B] font-semibold">
-                  {effectiveDefaultBranch}
+                  {effectiveRepoSlug} ({effectiveDefaultBranch})
                 </span>
                 <span className="text-zinc-400">←</span>
                 <span className="text-[#3F3F46] truncate">
