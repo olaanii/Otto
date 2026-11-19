@@ -101,6 +101,8 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+    final isWide = constraints.maxWidth >= 1080;
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -217,6 +219,18 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
             ),
           ),
 
+          if (isWide) ...[
+            const SizedBox(width: 8),
+            _ActiveModelPill(
+              modelName: widget.activeModelName ?? 'Google Antigravity (Pro)',
+              availableModels: widget.availableModels.isNotEmpty
+                  ? widget.availableModels
+                  : const ['Google Antigravity (Pro Subscription)', 'Gemini 2.5 Flash', 'Claude 3.5 Sonnet', 'OpenAI GPT-4o', 'Local Ollama'],
+              onSelectModel: widget.onSelectModel,
+              onOpenSettings: widget.onOpenSettings,
+            ),
+          ],
+
           const Spacer(),
 
           // 4. Figma Auto-Pilot Label & Switch
@@ -264,6 +278,7 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
         ],
       ),
     );
+    });
   }
 }
 
@@ -333,13 +348,18 @@ class _ActiveModelPill extends StatelessWidget {
           children: [
             const Icon(Icons.auto_awesome, size: 12, color: Color(0xFF60CDFF)),
             const SizedBox(width: 6),
-            Text(
-              modelName,
-              style: const TextStyle(
-                fontFamily: FluentTypography.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 85),
+              child: Text(
+                modelName,
+                style: const TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 4),
@@ -594,23 +614,35 @@ class _ClerkUserPill extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                user.fullName,
-                style: FluentTypography.bodyStrong.copyWith(
-                  fontSize: 13,
-                  color: isDark
-                      ? FluentMicaColors.textPrimaryDark
-                      : FluentMicaColors.textPrimaryLight,
-                ),
+              Row(
+                children: [
+                  Text(
+                    user.fullName,
+                    style: FluentTypography.bodyStrong.copyWith(
+                      fontSize: 13,
+                      color: isDark ? FluentMicaColors.textPrimaryDark : FluentMicaColors.textPrimaryLight,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(4)),
+                    child: const Text('Antigravity Pro', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF81C784))),
+                  ),
+                ],
               ),
+              const SizedBox(height: 2),
               Text(
                 user.email,
                 style: FluentTypography.caption.copyWith(
                   fontSize: 11,
-                  color: isDark
-                      ? FluentMicaColors.textSecondaryDark
-                      : FluentMicaColors.textSecondaryLight,
+                  color: isDark ? FluentMicaColors.textSecondaryDark : FluentMicaColors.textSecondaryLight,
                 ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Google AI Pro Plan • \$0 extra token fees',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Color(0xFF60CDFF)),
               ),
               if (user.isGithubConnected) ...[
                 const SizedBox(height: 6),
@@ -696,7 +728,7 @@ class _ClerkUserPill extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 100),
+              constraints: const BoxConstraints(maxWidth: 68),
               child: Text(
                 displayName,
                 style: FluentTypography.bodyStrong.copyWith(
@@ -708,6 +740,12 @@ class _ClerkUserPill extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(3)),
+              child: const Text('PRO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Color(0xFF81C784))),
             ),
             const SizedBox(width: 4),
             Icon(
