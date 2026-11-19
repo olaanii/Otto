@@ -556,18 +556,22 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		if targetDir == "" {
 			targetDir = s.antigravity.WorktreePath
 		}
+		token := fmt.Sprintf("hs_%x", time.Now().UnixNano()%10000000)
 		s.mu.Lock()
 		for i := range s.state.IdeProfiles {
 			if s.state.IdeProfiles[i].ID == body.AgentID {
-				s.state.IdeProfiles[i].Connected, s.state.IdeProfiles[i].Status = true, "watching_realtime"
+				s.state.IdeProfiles[i].Connected = false
+				s.state.IdeProfiles[i].Status = "awaiting_confirmation"
+				s.state.IdeProfiles[i].HandshakeToken = token
+				s.state.IdeProfiles[i].PendingWorkspace = targetDir
 			}
 		}
 		s.saveStateLocked()
 		s.mu.Unlock()
 
-		uri := launchAgentRedirect(body.AgentID, targetDir)
-		s.broadcastEvent("agent_connected", map[string]any{"agentId": body.AgentID, "uri": uri})
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID, "protocolUri": uri, "redirected": true})
+		authUrl := launchAgentHandshake(body.AgentID, targetDir, token)
+		s.broadcastEvent("agent_handshake_initiated", map[string]any{"agentId": body.AgentID, "authUrl": authUrl, "token": token})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID, "authUrl": authUrl, "token": token, "status": "awaiting_confirmation"})
 	})
 
 	mux.HandleFunc("/api/agents/disconnect", func(w http.ResponseWriter, r *http.Request) {
@@ -590,4 +594,6 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		s.broadcastEvent("agent_disconnected", map[string]any{"agentId": body.AgentID})
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID})
 	})
+
+	s.RegisterAgentHandshakeEndpoints(mux)
 }

@@ -143,8 +143,24 @@ func TestIntegrationsAgentRedirectionEndpoints(t *testing.T) {
 	}
 	var resp map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp["ok"] != true || resp["redirected"] != true {
-		t.Errorf("Unexpected response: %v", resp)
+	token, _ := resp["token"].(string)
+	if resp["ok"] != true || resp["status"] != "awaiting_confirmation" || token == "" {
+		t.Errorf("Unexpected handshake initiation response: %v", resp)
+	}
+
+	reqAuth := httptest.NewRequest(http.MethodGet, "/agents/authorize?agentId=antigravity&token="+token, nil)
+	recAuth := httptest.NewRecorder()
+	mux.ServeHTTP(recAuth, reqAuth)
+	if recAuth.Code != http.StatusOK || !bytes.Contains(recAuth.Body.Bytes(), []byte("AGENT HANDSHAKE")) {
+		t.Errorf("Expected 200 OK and auth page for /agents/authorize, got %d", recAuth.Code)
+	}
+
+	confirmBody, _ := json.Marshal(map[string]any{"agentId": "antigravity", "token": token})
+	reqConf := httptest.NewRequest(http.MethodPost, "/api/agents/confirm", bytes.NewReader(confirmBody))
+	recConf := httptest.NewRecorder()
+	mux.ServeHTTP(recConf, reqConf)
+	if recConf.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK for /api/agents/confirm, got %d", recConf.Code)
 	}
 
 	discBody, _ := json.Marshal(map[string]any{"agentId": "antigravity"})
