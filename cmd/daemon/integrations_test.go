@@ -129,3 +129,29 @@ func TestIntegrationsLlmEndpoints(t *testing.T) {
 		t.Errorf("Expected non-empty subscription, got %v", sub)
 	}
 }
+
+func TestIntegrationsAgentRedirectionEndpoints(t *testing.T) {
+	_, mux := setupTestServer(t)
+
+	tmpDir := t.TempDir()
+	body, _ := json.Marshal(map[string]any{"agentId": "antigravity", "workspacePath": tmpDir})
+	req := httptest.NewRequest(http.MethodPost, "/api/agents/connect", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK for /api/agents/connect, got %d", rec.Code)
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp["ok"] != true || resp["redirected"] != true {
+		t.Errorf("Unexpected response: %v", resp)
+	}
+
+	discBody, _ := json.Marshal(map[string]any{"agentId": "antigravity"})
+	reqDisc := httptest.NewRequest(http.MethodPost, "/api/agents/disconnect", bytes.NewReader(discBody))
+	recDisc := httptest.NewRecorder()
+	mux.ServeHTTP(recDisc, reqDisc)
+	if recDisc.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK for /api/agents/disconnect, got %d", recDisc.Code)
+	}
+}

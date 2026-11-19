@@ -537,4 +537,57 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 			"message": "Stack rebase validated and linearized successfully.",
 		})
 	})
+
+	// POST /api/agents/connect & /api/agents/disconnect
+	mux.HandleFunc("/api/agents/connect", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var body struct {
+			AgentID       string `json:"agentId"`
+			WorkspacePath string `json:"workspacePath"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.AgentID == "" {
+			body.AgentID = "antigravity"
+		}
+		targetDir := body.WorkspacePath
+		if targetDir == "" {
+			targetDir = s.antigravity.WorktreePath
+		}
+		s.mu.Lock()
+		for i := range s.state.IdeProfiles {
+			if s.state.IdeProfiles[i].ID == body.AgentID {
+				s.state.IdeProfiles[i].Connected, s.state.IdeProfiles[i].Status = true, "watching_realtime"
+			}
+		}
+		s.saveStateLocked()
+		s.mu.Unlock()
+
+		uri := launchAgentRedirect(body.AgentID, targetDir)
+		s.broadcastEvent("agent_connected", map[string]any{"agentId": body.AgentID, "uri": uri})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID, "protocolUri": uri, "redirected": true})
+	})
+
+	mux.HandleFunc("/api/agents/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var body struct {
+			AgentID string `json:"agentId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		s.mu.Lock()
+		for i := range s.state.IdeProfiles {
+			if s.state.IdeProfiles[i].ID == body.AgentID {
+				s.state.IdeProfiles[i].Connected, s.state.IdeProfiles[i].Status = false, "idle"
+			}
+		}
+		s.saveStateLocked()
+		s.mu.Unlock()
+		s.broadcastEvent("agent_disconnected", map[string]any{"agentId": body.AgentID})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID})
+	})
 }
