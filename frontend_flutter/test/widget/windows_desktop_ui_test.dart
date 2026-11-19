@@ -31,11 +31,11 @@ class FakeWorkspaceNotifier extends StateNotifier<WorkspaceState>
               WorkspaceState(
                 activeAgents: [
                   IdeAgentProfile(
-                    id: 'claude-code',
-                    name: 'Claude Code',
-                    description: 'Terminal coding agent',
-                    colorHex: '#D97757',
-                    iconKey: 'claude',
+                    id: 'antigravity',
+                    name: 'Google Antigravity',
+                    description: 'Agent-first IDE & autonomous commit daemon',
+                    colorHex: '#4285F4',
+                    iconKey: 'antigravity',
                     isActive: true,
                     lastActiveAt: DateTime.now(),
                   ),
@@ -43,9 +43,18 @@ class FakeWorkspaceNotifier extends StateNotifier<WorkspaceState>
                     id: 'cursor',
                     name: 'Cursor',
                     description: 'AI code editor',
-                    colorHex: '#5C5C66',
+                    colorHex: '#00D8A5',
                     iconKey: 'cursor',
                     isActive: true,
+                    lastActiveAt: DateTime.now(),
+                  ),
+                  IdeAgentProfile(
+                    id: 'vscode',
+                    name: 'VS Code',
+                    description: 'Visual Studio Code & Copilot',
+                    colorHex: '#007ACC',
+                    iconKey: 'vscode',
+                    isActive: false,
                     lastActiveAt: DateTime.now(),
                   ),
                 ],
@@ -383,12 +392,11 @@ void main() {
       await tester.tap(agentsNavTile);
       await tester.pumpAndSettle();
 
-      // Verify AI Agent picker view rendered (Figma 90:1036)
+      // Verify AI Agent picker view rendered with authentic IDE profiles
       expect(find.text('Connect your AI agents to Otto'), findsOneWidget);
-      expect(find.text('Claude Code'), findsWidgets);
+      expect(find.text('Google Antigravity'), findsWidgets);
       expect(find.text('Cursor'), findsWidgets);
-      expect(find.text('Codex'), findsWidgets);
-      expect(find.text('Terminal coding agent'), findsOneWidget);
+      expect(find.text('VS Code'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   });

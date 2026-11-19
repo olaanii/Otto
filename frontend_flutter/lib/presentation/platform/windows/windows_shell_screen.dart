@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../domain/models/atomic_commit_unit.dart';
 import '../../../domain/models/diff_hunk.dart';
+import '../../../domain/models/ide_agent_profile.dart';
 import '../../providers/auth_state_provider.dart';
 import '../../providers/diff_viewer_provider.dart';
 import '../../providers/hotkey_hud_provider.dart';
@@ -14,6 +15,8 @@ import '../../widgets/agent/prompt_stream_ticker.dart';
 import '../../widgets/hud/floating_hud_card.dart';
 import '../../screens/clerk_sign_in_screen.dart';
 import '../../screens/settings_dialog.dart';
+import 'windows_agent_card.dart';
+import 'windows_agent_connector.dart';
 import 'windows_command_bar.dart';
 import 'windows_content_dialog.dart';
 import 'windows_fluent_theme.dart';
@@ -2236,16 +2239,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                   : (constraints.maxWidth < 950 ? 2 : (constraints.maxWidth < 1250 ? 3 : 4));
               final aspectRatio = constraints.maxWidth < 650 ? 2.5 : 1.45;
 
-              final catalog = [
-                (id: 'antigravity', name: 'Google Antigravity', desc: 'Agent-first IDE & autonomous commit daemon', letter: 'A', logoBg: const Color(0xFF4285F4)),
-                (id: 'claude-code', name: 'Claude Code', desc: 'Terminal coding agent', letter: 'C', logoBg: const Color(0xFFD97757)),
-                (id: 'cursor', name: 'Cursor', desc: 'AI code editor', letter: 'C', logoBg: const Color(0xFF5C5C66)),
-                (id: 'codex', name: 'Codex', desc: 'Cloud and CLI coding agent', letter: 'C', logoBg: const Color(0xFF10A37F)),
-                (id: 'devin', name: 'Devin', desc: 'Autonomous software engineer', letter: 'D', logoBg: const Color(0xFF2F9E8F)),
-                (id: 'kiro', name: 'Kiro', desc: 'Spec-driven IDE', letter: 'K', logoBg: const Color(0xFFFF9900)),
-                (id: 'copilot', name: 'GitHub Copilot', desc: 'Coding assistant in your IDE', letter: 'G', logoBg: const Color(0xFF8E8E93)),
-                (id: 'custom', name: 'Other agent', desc: 'Connect any agent with an API key', letter: 'O', logoBg: const Color(0xFF2E2E36)),
-              ];
+              final agents = workspace.activeAgents.isNotEmpty
+                  ? workspace.activeAgents
+                  : IdeAgentProfile.defaults;
 
               return GridView.count(
                 crossAxisCount: crossAxisCount,
@@ -2253,22 +2249,12 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 mainAxisSpacing: 12,
                 childAspectRatio: aspectRatio,
                 children: [
-                  for (final item in catalog) ...[
-                    Builder(
-                      builder: (context) {
-                        final matchedAgent = workspace.activeAgents.where((a) => a.id == item.id || a.name.toLowerCase() == item.name.toLowerCase()).firstOrNull;
-                        final isConnected = matchedAgent != null && matchedAgent.isActive;
-                        return _buildAgentCard(
-                          name: item.name,
-                          desc: item.desc,
-                          badgeText: isConnected ? 'Connected & Active' : 'Not connected',
-                          badgeColor: isConnected ? const Color(0xFF6CCB5F) : const Color(0xFF8A8A8A),
-                          letter: item.letter,
-                          logoBg: item.logoBg,
-                        );
-                      },
+                  for (final agent in agents)
+                    WindowsAgentCard(
+                      agent: agent,
+                      workspace: workspace,
+                      showInfoBar: _showFluentInfoBar,
                     ),
-                  ],
                 ],
               );
             },
