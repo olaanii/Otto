@@ -89,6 +89,16 @@ func TestIntegrationsLlmEndpoints(t *testing.T) {
 	if !ok || len(provList) < 4 {
 		t.Errorf("Expected at least 4 providers, got %v", provResp["providers"])
 	}
+	foundAntigravity := false
+	for _, p := range provList {
+		if pm, ok := p.(map[string]any); ok && pm["id"] == "antigravity" {
+			foundAntigravity = true
+			break
+		}
+	}
+	if !foundAntigravity {
+		t.Errorf("Expected antigravity provider in /api/llm/providers, got %v", provResp["providers"])
+	}
 
 	// 2. POST /api/llm/configure
 	configBody := []byte(`{"providerId": "gemini", "apiKey": "test-key-12345"}`)

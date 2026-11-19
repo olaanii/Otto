@@ -316,7 +316,18 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 			ollamaURL = "http://localhost:11434"
 		}
 
+		agConnected := s.antigravity.Connected && s.antigravity.User.Email != ""
 		providers := []map[string]any{
+			{
+				"id":           "antigravity",
+				"name":         "Google Antigravity (Pro Subscription)",
+				"provider":     "google_antigravity",
+				"isConfigured": agConnected,
+				"model":        "Gemini 3.8 Flash (High)",
+				"email":        s.antigravity.User.Email,
+				"userName":     s.antigravity.User.Name,
+				"plan":         "Google AI Pro Plan ($0 token fees)",
+			},
 			{
 				"id":           "gemini",
 				"name":         "Google Gemini 2.5 Flash",
