@@ -9,7 +9,7 @@ class IdeAgentProfile {
   final List<String> activeFiles;
   final String? currentPrompt;
   final bool isActive;
-  final DateTime lastActiveAt;
+  final DateTime? lastActiveAt;
 
   const IdeAgentProfile({
     required this.id,
@@ -20,7 +20,7 @@ class IdeAgentProfile {
     this.activeFiles = const [],
     this.currentPrompt,
     this.isActive = false,
-    required this.lastActiveAt,
+    this.lastActiveAt,
   });
 
   IdeAgentProfile copyWith({
@@ -56,26 +56,59 @@ class IdeAgentProfile {
         'activeFiles': activeFiles,
         'currentPrompt': currentPrompt,
         'isActive': isActive,
-        'lastActiveAt': lastActiveAt.toIso8601String(),
+        'lastActiveAt': lastActiveAt?.toIso8601String(),
       };
 
-  factory IdeAgentProfile.fromJson(Map<String, dynamic> json) => IdeAgentProfile(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        description: json['description'] as String? ?? '',
-        colorHex: json['colorHex'] as String? ?? '#6366F1',
-        iconKey: json['iconKey'] as String? ?? 'bot',
-        activeFiles: (json['activeFiles'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            const [],
-        currentPrompt: json['currentPrompt'] as String?,
-        isActive: json['isActive'] as bool? ??
-            (json['status'] == 'watching_realtime' || json['status'] == 'active'),
-        lastActiveAt: json['lastActiveAt'] != null
-            ? DateTime.tryParse(json['lastActiveAt'] as String) ?? DateTime.now()
-            : DateTime.now(),
-      );
+  factory IdeAgentProfile.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] as String? ?? 'agent').toLowerCase();
+    final name = json['name'] as String? ?? id;
+    final isConn = json['connected'] == true || json['isActive'] == true || json['status'] == 'watching_realtime';
+    String desc = json['description'] as String? ?? '';
+    String color = json['colorHex'] as String? ?? '#4285F4';
+    if (id.contains('antigravity')) {
+      desc = desc.isNotEmpty ? desc : 'Agent-first IDE & autonomous commit daemon';
+      color = '#4285F4';
+    } else if (id.contains('cursor')) {
+      desc = desc.isNotEmpty ? desc : 'AI-first code editor & Composer';
+      color = '#00D8A5';
+    } else if (id.contains('vscode') || id.contains('code')) {
+      desc = desc.isNotEmpty ? desc : 'Visual Studio Code & Copilot';
+      color = '#007ACC';
+    }
+    return IdeAgentProfile(
+      id: id,
+      name: name,
+      description: desc,
+      colorHex: color,
+      iconKey: json['iconKey'] as String? ?? id,
+      activeFiles: (json['activeFiles'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      currentPrompt: json['currentPrompt'] as String?,
+      isActive: isConn,
+      lastActiveAt: json['lastActiveAt'] != null ? DateTime.tryParse(json['lastActiveAt'] as String) : null,
+    );
+  }
 
-  static List<IdeAgentProfile> get defaults => const [];
+  static List<IdeAgentProfile> get defaults => const [
+        IdeAgentProfile(
+          id: 'antigravity',
+          name: 'Google Antigravity',
+          description: 'Agent-first IDE & autonomous commit daemon',
+          colorHex: '#4285F4',
+          iconKey: 'antigravity',
+        ),
+        IdeAgentProfile(
+          id: 'cursor',
+          name: 'Cursor',
+          description: 'AI code editor & Composer',
+          colorHex: '#00D8A5',
+          iconKey: 'cursor',
+        ),
+        IdeAgentProfile(
+          id: 'vscode',
+          name: 'VS Code',
+          description: 'Visual Studio Code & Copilot',
+          colorHex: '#007ACC',
+          iconKey: 'vscode',
+        ),
+      ];
 }

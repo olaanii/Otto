@@ -34,6 +34,8 @@ class ApiEndpoints {
   static const String githubUser = '/api/github/user';
   static const String workspaceOpen = '/api/workspace/open';
   static const String workspaceRecent = '/api/workspace/recent';
+  static const String agentsConnect = '/api/agents/connect';
+  static const String agentsDisconnect = '/api/agents/disconnect';
   static const String llmConfigure = '/api/llm/configure';
   static const String llmCommitMessage = '/llm/commit-message';
 
