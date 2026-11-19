@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:window_manager/window_manager.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../domain/models/ide_agent_profile.dart';
 import '../../providers/auth_state_provider.dart';
@@ -58,7 +59,12 @@ class WindowsAgentConnector {
           FilledButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              try {
+                await windowManager.show();
+                await windowManager.focus();
+              } catch (_) {}
               await ref.read(workspaceProvider.notifier).refreshWorkspace();
+              showInfoBar(message: '${agent.name} connection confirmed & synchronized.');
             },
             child: const Text('I Have Confirmed ↗'),
           ),
