@@ -11,12 +11,29 @@ import (
 func TestIntegrationsWorkspaceEndpoints(t *testing.T) {
 	_, mux := setupTestServer(t)
 
-	// 1. POST /api/workspace/open with invalid path
+	// 1. POST /api/workspace/open with non-existent path
 	req := httptest.NewRequest(http.MethodPost, "/api/workspace/open", bytes.NewReader([]byte(`{"path": "invalid_non_git_path_12345"}`)))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("Expected 400 Bad Request for non-git directory, got %d", rec.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp["ok"] == true {
+		t.Errorf("Expected ok: false for non-existent directory, got %v", resp)
+	}
+
+	// 2. POST /api/workspace/open with real non-git folder (auto-init)
+	tmpDir := t.TempDir()
+	initPayload, _ := json.Marshal(map[string]any{
+		"path":     tmpDir,
+		"autoInit": true,
+	})
+	reqInit := httptest.NewRequest(http.MethodPost, "/api/workspace/open", bytes.NewReader(initPayload))
+	recInit := httptest.NewRecorder()
+	mux.ServeHTTP(recInit, reqInit)
+	var respInit map[string]any
+	_ = json.Unmarshal(recInit.Body.Bytes(), &respInit)
+	if respInit["ok"] != true || respInit["isNewRepo"] != true {
+		t.Errorf("Expected ok: true and isNewRepo: true for auto-initialized directory, got %v", respInit)
 	}
 
 	// 2. GET /api/workspace/recent

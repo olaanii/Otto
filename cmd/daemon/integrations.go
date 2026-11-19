@@ -25,27 +25,42 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "application/json")
 
 		var body struct {
-			Path string `json:"path"`
+			Path     string `json:"path"`
+			AutoInit bool   `json:"autoInit"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Path) == "" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "path is required"})
 			return
 		}
 
 		cleanPath := filepath.Clean(strings.TrimSpace(body.Path))
-		cmd := exec.Command("git", "-C", cleanPath, "rev-parse", "--show-toplevel")
-		out, err := cmd.Output()
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+		fi, statErr := os.Stat(cleanPath)
+		if statErr != nil || !fi.IsDir() {
+			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"ok":    false,
-				"error": fmt.Sprintf("Directory is not a valid git repository: %s", cleanPath),
+				"error": fmt.Sprintf("Directory does not exist: %s", cleanPath),
 			})
 			return
 		}
 
-		topLevel := strings.TrimSpace(string(out))
+		cmd := exec.Command("git", "-C", cleanPath, "rev-parse", "--show-toplevel")
+		out, err := cmd.Output()
+		topLevel := ""
+		isNewRepo := false
+		if err != nil {
+			// Auto-init git repository for project folder
+			initCmd := exec.Command("git", "-C", cleanPath, "init", "-b", "main")
+			if initErr := initCmd.Run(); initErr != nil {
+				_ = exec.Command("git", "-C", cleanPath, "init").Run()
+			}
+			topLevel = cleanPath
+			isNewRepo = true
+		} else {
+			topLevel = strings.TrimSpace(string(out))
+		}
+
 		s.mu.Lock()
 		s.antigravity.WorktreePath = topLevel
 
@@ -73,7 +88,30 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 				s.state.GitHubConfig.Owner = o
 				s.state.GitHubConfig.Repo = repo
 			}
+		} else {
+			s.state.GitHubConfig.Owner = ""
+			s.state.GitHubConfig.Repo = ""
 		}
+
+		// Reload commit history from opened repository
+		logOut, _ := exec.Command("git", "-C", topLevel, "log", "-n", "10", "--pretty=format:%h%x09%an%x09%s").Output()
+		var realCommits []AtomicCommitUnit
+		for _, l := range strings.Split(strings.TrimSpace(string(logOut)), "\n") {
+			parts := strings.Split(l, "\t")
+			if len(parts) >= 3 {
+				realCommits = append(realCommits, AtomicCommitUnit{
+					ID:                 parts[0],
+					Sha:                parts[0],
+					Type:               "feat",
+					Title:              parts[2],
+					ConventionalHeader: parts[2],
+					BranchName:         activeBranch,
+					ParentBranch:       "main",
+					Status:             "pushed",
+				})
+			}
+		}
+		s.state.StagedAtomicStack = realCommits
 
 		s.saveStateLocked()
 		s.mu.Unlock()
@@ -90,6 +128,7 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 			"activeBranch": activeBranch,
 			"remote":       remoteURL,
 			"recent":       s.state.RecentWorkspaces,
+			"isNewRepo":    isNewRepo,
 		})
 	})
 

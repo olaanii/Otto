@@ -1254,6 +1254,10 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		w.Header().Set("Content-Type", "application/json")
 
 		s.mu.RLock()
+		targetDir := s.antigravity.WorktreePath
+		if targetDir == "" {
+			targetDir, _ = os.Getwd()
+		}
 		totalLoc := 0
 		for _, h := range s.state.WorkingTreeHunks {
 			totalLoc += h.Additions + h.Deletions
@@ -1261,11 +1265,18 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		staged := s.state.StagedAtomicStack
 		s.mu.RUnlock()
 
+		diffOut, _ := exec.Command("git", "-C", targetDir, "diff", "HEAD").Output()
+		if len(diffOut) == 0 {
+			diffOut, _ = exec.Command("git", "-C", targetDir, "diff").Output()
+		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{
+			"diff":                string(diffOut),
 			"stagedSlices":        staged,
 			"totalUncommittedLoc": totalLoc,
-			"workingTreeClean":    len(staged) == 0,
+			"workingTreeClean":    len(staged) == 0 && len(diffOut) == 0,
 			"engine":              "otto-ast-slicer-native-go",
+			"worktree":            targetDir,
 		})
 	})
 
