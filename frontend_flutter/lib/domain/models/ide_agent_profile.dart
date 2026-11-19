@@ -9,7 +9,10 @@ class IdeAgentProfile {
   final List<String> activeFiles;
   final String? currentPrompt;
   final bool isActive;
+  final String status;
   final DateTime? lastActiveAt;
+
+  bool get isAwaitingConfirmation => status == 'awaiting_confirmation';
 
   const IdeAgentProfile({
     required this.id,
@@ -20,6 +23,7 @@ class IdeAgentProfile {
     this.activeFiles = const [],
     this.currentPrompt,
     this.isActive = false,
+    this.status = 'idle',
     this.lastActiveAt,
   });
 
@@ -32,6 +36,7 @@ class IdeAgentProfile {
     List<String>? activeFiles,
     String? currentPrompt,
     bool? isActive,
+    String? status,
     DateTime? lastActiveAt,
   }) {
     return IdeAgentProfile(
@@ -43,6 +48,7 @@ class IdeAgentProfile {
       activeFiles: activeFiles ?? this.activeFiles,
       currentPrompt: currentPrompt ?? this.currentPrompt,
       isActive: isActive ?? this.isActive,
+      status: status ?? this.status,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
     );
   }
@@ -56,13 +62,16 @@ class IdeAgentProfile {
         'activeFiles': activeFiles,
         'currentPrompt': currentPrompt,
         'isActive': isActive,
+        'status': status,
         'lastActiveAt': lastActiveAt?.toIso8601String(),
       };
 
   factory IdeAgentProfile.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] as String? ?? 'agent').toLowerCase();
     final name = json['name'] as String? ?? id;
-    final isConn = json['connected'] == true || json['isActive'] == true || json['status'] == 'watching_realtime';
+    final rawStatus = json['status'] as String? ?? '';
+    final isConn = json['connected'] == true || json['isActive'] == true || rawStatus == 'watching_realtime';
+    final resolvedStatus = rawStatus.isNotEmpty ? rawStatus : (isConn ? 'watching_realtime' : 'idle');
     String desc = json['description'] as String? ?? '';
     String color = json['colorHex'] as String? ?? '#4285F4';
     if (id.contains('antigravity')) {
@@ -84,6 +93,7 @@ class IdeAgentProfile {
       activeFiles: (json['activeFiles'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
       currentPrompt: json['currentPrompt'] as String?,
       isActive: isConn,
+      status: resolvedStatus,
       lastActiveAt: json['lastActiveAt'] != null ? DateTime.tryParse(json['lastActiveAt'] as String) : null,
     );
   }
