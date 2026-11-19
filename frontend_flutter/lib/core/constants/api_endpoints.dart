@@ -18,7 +18,12 @@ class ApiEndpoints {
   static const String syncStatus = '/api/github/sync-status';
   static const String syncNow = '/api/github/sync-now';
 
-  // Auth & Session
+  // Auth & Session (wired to actual backend routes)
+  static const String antigravityConnect = '/api/antigravity/connect';
+  static const String antigravityStatus = '/api/antigravity/status';
+  static const String antigravitySignout = '/api/antigravity/signout';
+
+  // Legacy aliases kept for reference — not used by ClerkAuthDataSource
   static const String clerkVerify = '/auth/clerk-verify';
   static const String clerkSession = '/auth/session';
   static const String clerkSignOut = '/auth/signout';

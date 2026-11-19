@@ -33,12 +33,15 @@ class AuthRepositoryImpl implements IAuthRepository {
   Future<ClerkUserSession?> getCurrentSession() async {
     try {
       final token = await secureStorage.read(SecureStorageService.keyClerkToken);
-      if (token == null || token.isEmpty) return null;
-
-      final session = await authDataSource.validateSession(token);
+      final session = await authDataSource.validateSession(token ?? '');
       if (session == null) {
-        await secureStorage.clearSession();
+        if (token != null) await secureStorage.clearSession();
         return null;
+      }
+      if (token == null || token.isEmpty) {
+        await secureStorage.write(SecureStorageService.keyClerkToken, session.sessionToken);
+        await secureStorage.write(SecureStorageService.keyClerkJwt, session.jwt);
+        await secureStorage.write(SecureStorageService.keyUserId, session.userId);
       }
       return session;
     } catch (e) {
