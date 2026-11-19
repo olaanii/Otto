@@ -70,39 +70,12 @@ class IdeAgentProfile {
                 .toList() ??
             const [],
         currentPrompt: json['currentPrompt'] as String?,
-        isActive: json['isActive'] as bool? ?? false,
+        isActive: json['isActive'] as bool? ??
+            (json['status'] == 'watching_realtime' || json['status'] == 'active'),
         lastActiveAt: json['lastActiveAt'] != null
             ? DateTime.tryParse(json['lastActiveAt'] as String) ?? DateTime.now()
             : DateTime.now(),
       );
 
-  static List<IdeAgentProfile> get defaults => [
-        IdeAgentProfile(
-          id: 'claude-code',
-          name: 'Claude Code',
-          description: 'Anthropic CLI research & refactoring agent',
-          colorHex: '#D97706',
-          iconKey: 'claude',
-          isActive: true,
-          lastActiveAt: DateTime.now(),
-        ),
-        IdeAgentProfile(
-          id: 'cursor-composer',
-          name: 'Cursor Composer',
-          description: 'Multi-file codebase editor agent',
-          colorHex: '#6366F1',
-          iconKey: 'cursor',
-          isActive: false,
-          lastActiveAt: DateTime.now().subtract(const Duration(minutes: 5)),
-        ),
-        IdeAgentProfile(
-          id: 'cline',
-          name: 'Cline',
-          description: 'Autonomous coding assistant',
-          colorHex: '#10B981',
-          iconKey: 'cline',
-          isActive: false,
-          lastActiveAt: DateTime.now().subtract(const Duration(minutes: 20)),
-        ),
-      ];
+  static List<IdeAgentProfile> get defaults => const [];
 }

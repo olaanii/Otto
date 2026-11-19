@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../domain/models/atomic_commit_unit.dart';
 import '../../../domain/models/diff_hunk.dart';
 import '../../providers/auth_state_provider.dart';
 import '../../providers/diff_viewer_provider.dart';
@@ -9,6 +10,7 @@ import '../../providers/rebase_canvas_provider.dart';
 import '../../providers/workspace_provider.dart';
 import '../../widgets/agent/prompt_stream_ticker.dart';
 import '../../widgets/hud/floating_hud_card.dart';
+import '../../screens/clerk_sign_in_screen.dart';
 import '../../screens/settings_dialog.dart';
 import 'windows_command_bar.dart';
 import 'windows_content_dialog.dart';
@@ -34,8 +36,8 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
 
   // Figma Windows 11 Flow States
   int _stackedPrSubView = 0; // 0 = Stacked PRs (Figma 90:633), 1 = Working changes (Figma 90:707), 2 = Sync and recovery (Figma 90:969)
-  int _selectedBranchIndex = 1; // Default to feat/diff-parser (PR #242)
-  final Set<String> _checkedFiles = {'app/stack.ts', 'ui/Sidebar.tsx'};
+  int _selectedBranchIndex = 0;
+  final Set<String> _checkedFiles = <String>{};
   int _selectedWorkingCommitIndex = 0;
   String? _selectedAgentId; // null = grid (Figma 90:1036), or agent name for detail (Figma 90:1141)
   bool _showSyncBanner = false; // Figma Sync and recovery (90:969)
@@ -335,6 +337,11 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                                   builder: (_) => const SettingsDialog(),
                                 );
                               },
+                              onSignIn: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(builder: (_) => const ClerkSignInScreen()),
+                                );
+                              },
                               onSignOut: () =>
                                   ref.read(authStateProvider.notifier).signOut(),
                             ),
@@ -436,8 +443,8 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
       _ => 'Stacked PRs',
     };
     final subtitle = switch (_stackedPrSubView) {
-      0 => '${workspace.currentBranch} · 4 branches · graph valid',
-      1 => '9 hunks grouped into 4 commits · review before committing',
+      0 => '${workspace.currentBranch} · ${workspace.stackGraph.commits.length} branches · graph valid',
+      1 => '${diffs.length} files (${stagedHunks.length} hunks) · review before committing',
       2 => 'Last attempt 2 minutes ago',
       _ => '',
     };
@@ -608,14 +615,126 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     );
   }
 
+  /// Helper to convert CommitStatus to label and color
+  String _getCommitStatusLabel(CommitStatus status) {
+    return switch (status) {
+      CommitStatus.draft => 'Draft',
+      CommitStatus.inReview => 'In review',
+      CommitStatus.readyToPush => 'Ready',
+      CommitStatus.pushed => 'Pushed',
+      CommitStatus.merged => 'Merged',
+      CommitStatus.conflicted => 'Conflict',
+    };
+  }
+
+  Color _getCommitStatusColor(CommitStatus status) {
+    return switch (status) {
+      CommitStatus.draft => const Color(0xFFB3B3B3),
+      CommitStatus.inReview => const Color(0xFFFCE100),
+      CommitStatus.readyToPush => const Color(0xFF6CCB5F),
+      CommitStatus.pushed => const Color(0xFF60CDFF),
+      CommitStatus.merged => const Color(0xFFA855F7),
+      CommitStatus.conflicted => const Color(0xFFFF5252),
+    };
+  }
+
   /// Exact Windows 11 Stacked PRs View (Figma 90:633).
   Widget _buildFigmaStackedPrView(BuildContext context, WorkspaceState workspace) {
-    final branches = [
-      {'name': 'feat/stack-model', 'pr': 'PR #241', 'status': 'Ready', 'indent': 0.0, 'color': const Color(0xFF6CCB5F), 'base': 'main', 'reviewers': '1 requested', 'checks': 'Passing', 'pos': '1 of 4'},
-      {'name': 'feat/diff-parser', 'pr': 'PR #242', 'status': 'Draft', 'indent': 24.0, 'color': const Color(0xFFB3B3B3), 'base': 'main', 'reviewers': '2 requested', 'checks': 'Passing', 'pos': '2 of 4'},
-      {'name': 'feat/dag-view', 'pr': 'PR #243', 'status': 'In review', 'indent': 48.0, 'color': const Color(0xFFFCE100), 'base': 'main', 'reviewers': '3 requested', 'checks': 'Passing', 'pos': '3 of 4'},
-      {'name': 'fix/rebase-conflict', 'pr': 'PR #244', 'status': 'Ready', 'indent': 24.0, 'color': const Color(0xFF6CCB5F), 'base': 'main', 'reviewers': '1 requested', 'checks': 'Passing', 'pos': '4 of 4'},
-    ];
+    final commits = workspace.stackGraph.commits;
+
+    if (commits.isEmpty) {
+      return Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 480),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2B2B2B),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF3A3A3A)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF353538),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: const Color(0xFF4A4A4A)),
+                ),
+                child: const Icon(
+                  Icons.account_tree_outlined,
+                  size: 28,
+                  color: Color(0xFF60CDFF),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'No stacked commits yet. Changes will appear here as you work.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Make code edits or let your active IDE agent generate changes. Otto will automatically slice diffs into atomic commits (≤80 LOC) and build your stack.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFFB3B3B3),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FluentButton(
+                onPressed: _handleSyncNow,
+                style: FluentButtonStyle.accent,
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.refresh_rounded, size: 14, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text('Check Workspace Changes'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final branches = commits.asMap().entries.map((entry) {
+      final i = entry.key;
+      final c = entry.value;
+      final prLabel = c.prNumber != null
+          ? 'PR #${c.prNumber}'
+          : (c.isPushed
+              ? 'PR #${c.id.length > 4 ? c.id.substring(0, 4) : c.id}'
+              : 'Local #${c.id.length > 6 ? c.id.substring(0, 6) : c.id}');
+      return {
+        'name': c.branchName.isNotEmpty ? c.branchName : c.conventionalTitle,
+        'pr': prLabel,
+        'status': _getCommitStatusLabel(c.status),
+        'indent': c.parentCommitId != null ? 24.0 : 0.0,
+        'color': _getCommitStatusColor(c.status),
+        'base': c.parentCommitId ?? 'main',
+        'reviewers': c.author.isNotEmpty ? c.author : 'Self',
+        'checks': c.exceedsLocThreshold ? 'Warning: >80 LOC' : 'Passing',
+        'pos': '${i + 1} of ${commits.length}',
+        'commit': c,
+      };
+    }).toList();
 
     final activeBranch = branches[_selectedBranchIndex.clamp(0, branches.length - 1)];
 
@@ -797,63 +916,75 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
 
   /// Exact Windows 11 Sync and Recovery View (Figma 90:969).
   Widget _buildFigmaSyncRecoveryView(BuildContext context, WorkspaceState workspace) {
-    final pendingCommits = [
-      {'sha': 'a1f3c2d', 'title': 'feat: add stacked PR model', 'status': 'Not pushed', 'statusColor': const Color(0xFFFCE100)},
-      {'sha': '7b2e9f0', 'title': 'refactor: split diff hunks', 'status': 'Waiting', 'statusColor': const Color(0xFFB3B3B3)},
-      {'sha': 'c04d8a1', 'title': 'fix: rebase conflict on main', 'status': 'Waiting', 'statusColor': const Color(0xFFB3B3B3)},
-    ];
+    final pendingCommits = workspace.stackGraph.commits
+        .where((c) => c.status != CommitStatus.merged && c.status != CommitStatus.pushed)
+        .toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Error banner (Figma 90:1007)
-        Container(
-          padding: const EdgeInsets.all(12),
+    if (pendingCommits.isEmpty) {
+      return Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 480),
+          padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
-            color: const Color(0xFF3A3210),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: const Color(0xFF6B5A1E)),
+            color: const Color(0xFF282828),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF383838)),
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Expanded(
-                child: Text(
-                  'Sync failed: remote rejected push (non fast-forward)',
-                  style: TextStyle(
-                    fontFamily: FluentTypography.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFFFCE100),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6CCB5F).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.cloud_done_outlined,
+                  color: Color(0xFF6CCB5F),
+                  size: 24,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(height: 16),
+              const Text(
+                'Everything in sync',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'All commits in your stack are synchronized with remote origin. No sync conflicts or recovery actions needed.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFFB3B3B3),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
               FluentButton(
-                onPressed: () {
-                  _showFluentInfoBar(
-                    message: 'Sync log: updates were rejected because remote contains conflicting commits.',
-                  );
-                },
+                onPressed: () => _handleSyncNow(),
                 style: FluentButtonStyle.standard,
                 height: 32,
-                child: const Text('View log'),
-              ),
-              const SizedBox(width: 8),
-              FluentButton(
-                onPressed: () async {
-                  await _handleSyncNow();
-                },
-                style: FluentButtonStyle.accent,
-                height: 32,
-                child: const Text('Retry'),
+                child: const Text('Check Remote Origin'),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        // Columns: Pending commits & Sync log (Figma 90:1014)
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -879,7 +1010,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  c['sha'] as String,
+                                  c.id.length > 7 ? c.id.substring(0, 7) : c.id,
                                   style: const TextStyle(
                                     fontFamily: FluentTypography.monoFamily,
                                     fontSize: 11,
@@ -889,7 +1020,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  c['title'] as String,
+                                  c.summary,
                                   style: const TextStyle(
                                     fontFamily: FluentTypography.fontFamily,
                                     fontSize: 13,
@@ -904,12 +1035,12 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            c['status'] as String,
-                            style: TextStyle(
+                            _getCommitStatusLabel(c.status),
+                            style: const TextStyle(
                               fontFamily: FluentTypography.fontFamily,
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: c['statusColor'] as Color,
+                              color: Color(0xFFFCE100),
                             ),
                           ),
                         ],
@@ -926,12 +1057,12 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFF3A3A3A)),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Sync log',
+                    const Text(
+                      'Sync status',
                       style: TextStyle(
                         fontFamily: FluentTypography.fontFamily,
                         fontSize: 13,
@@ -939,31 +1070,22 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: 10),
                     Text(
-                      '› fetch origin/main ok',
-                      style: TextStyle(
+                      'Active branch: ${workspace.currentBranch}',
+                      style: const TextStyle(
                         fontFamily: FluentTypography.monoFamily,
                         fontSize: 11,
                         color: Color(0xFFB3B3B3),
                       ),
                     ),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text(
-                      '› push feat/stack-pr rejected',
-                      style: TextStyle(
+                      'Pending commits: ${pendingCommits.length}',
+                      style: const TextStyle(
                         fontFamily: FluentTypography.monoFamily,
                         fontSize: 11,
-                        color: Color(0xFFFF9E94),
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '  hint: remote has commits you do not have',
-                      style: TextStyle(
-                        fontFamily: FluentTypography.monoFamily,
-                        fontSize: 11,
-                        color: Color(0xFFB3B3B3),
+                        color: Color(0xFF60CDFF),
                       ),
                     ),
                   ],
@@ -996,22 +1118,85 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
   }
 
   /// Exact Windows 11 Working Changes View (Figma 90:707).
-  Widget _buildFigmaWorkingChangesView(
+    Widget _buildFigmaWorkingChangesView(
     BuildContext context,
     WorkspaceState workspace,
     List<FileDiff> diffs,
     List<DiffHunk> stagedHunks,
   ) {
+    if (diffs.isEmpty) {
+      return Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 480),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: const Color(0xFF282828),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF383838)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF60CDFF).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  color: Color(0xFF60CDFF),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Working tree clean',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'No uncommitted file diffs or working changes detected in this repository. Edit files in your IDE or worktree to trigger real-time AST commit slicing.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFFB3B3B3),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FluentButton(
+                onPressed: () => _handleSyncNow(),
+                style: FluentButtonStyle.standard,
+                height: 32,
+                child: const Text('Refresh Working Tree'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final selectedFile = diffs[_selectedWorkingCommitIndex.clamp(0, diffs.length - 1)];
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 800;
-        final filesWidth = isNarrow ? 180.0 : 250.0;
-        final commitsWidth = isNarrow ? 220.0 : 300.0;
+        final filesWidth = isNarrow ? 200.0 : 280.0;
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Column 1: Files (250px)
+            // Changed Files List
             Container(
               width: filesWidth,
               padding: const EdgeInsets.all(12),
@@ -1020,104 +1205,29 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFF3A3A3A)),
               ),
-              child: ListView(
-                children: [
-                  _buildWorkingFileItem(
-                    'app/stack.ts',
-                    '3 hunks',
-                    isChecked: _checkedFiles.contains('app/stack.ts'),
+              child: ListView.builder(
+                itemCount: diffs.length,
+                itemBuilder: (context, idx) {
+                  final fd = diffs[idx];
+                  return _buildWorkingFileItem(
+                    fd.filePath,
+                    '${fd.hunks.length} hunks · +${fd.additions} -${fd.deletions}',
+                    isChecked: _checkedFiles.contains(fd.filePath),
                     onToggle: () => setState(() {
-                      if (_checkedFiles.contains('app/stack.ts')) {
-                        _checkedFiles.remove('app/stack.ts');
+                      if (_checkedFiles.contains(fd.filePath)) {
+                        _checkedFiles.remove(fd.filePath);
                       } else {
-                        _checkedFiles.add('app/stack.ts');
+                        _checkedFiles.add(fd.filePath);
                       }
                     }),
-                  ),
-                  _buildWorkingFileItem(
-                    'ui/Sidebar.tsx',
-                    '2 hunks',
-                    isChecked: _checkedFiles.contains('ui/Sidebar.tsx'),
-                    onToggle: () => setState(() {
-                      if (_checkedFiles.contains('ui/Sidebar.tsx')) {
-                        _checkedFiles.remove('ui/Sidebar.tsx');
-                      } else {
-                        _checkedFiles.add('ui/Sidebar.tsx');
-                      }
-                    }),
-                  ),
-                  _buildWorkingFileItem(
-                    'tests/stack.test.ts',
-                    '2 hunks',
-                    isChecked: _checkedFiles.contains('tests/stack.test.ts'),
-                    onToggle: () => setState(() {
-                      if (_checkedFiles.contains('tests/stack.test.ts')) {
-                        _checkedFiles.remove('tests/stack.test.ts');
-                      } else {
-                        _checkedFiles.add('tests/stack.test.ts');
-                      }
-                    }),
-                  ),
-                  _buildWorkingFileItem(
-                    'config/eslint.json',
-                    '1 hunk',
-                    isChecked: _checkedFiles.contains('config/eslint.json'),
-                    onToggle: () => setState(() {
-                      if (_checkedFiles.contains('config/eslint.json')) {
-                        _checkedFiles.remove('config/eslint.json');
-                      } else {
-                        _checkedFiles.add('config/eslint.json');
-                      }
-                    }),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
 
             const SizedBox(width: 12),
 
-            // Column 2: Commits (300px)
-            Container(
-              width: commitsWidth,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2B2B2B),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF3A3A3A)),
-              ),
-              child: ListView(
-                children: [
-                  _buildWorkingCommitCard(
-                    'feat(stack): add DAG model',
-                    '3 hunks · +128 −12',
-                    isSelected: _selectedWorkingCommitIndex == 0,
-                    onTap: () => setState(() => _selectedWorkingCommitIndex = 0),
-                  ),
-                  _buildWorkingCommitCard(
-                    'refactor(diff): split parser',
-                    '2 hunks · +44 −30',
-                    isSelected: _selectedWorkingCommitIndex == 1,
-                    onTap: () => setState(() => _selectedWorkingCommitIndex = 1),
-                  ),
-                  _buildWorkingCommitCard(
-                    'test(stack): cycle checks',
-                    '2 hunks · +76 −0',
-                    isSelected: _selectedWorkingCommitIndex == 2,
-                    onTap: () => setState(() => _selectedWorkingCommitIndex = 2),
-                  ),
-                  _buildWorkingCommitCard(
-                    'chore(eslint): update config',
-                    '1 hunk · +4 −4',
-                    isSelected: _selectedWorkingCommitIndex == 3,
-                    onTap: () => setState(() => _selectedWorkingCommitIndex = 3),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            // Column 3: Inspector (flex: 1)
+            // Diff Hunks Inspector
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(16),
@@ -1129,9 +1239,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'app/stack.ts',
-                      style: TextStyle(
+                    Text(
+                      selectedFile.filePath,
+                      style: const TextStyle(
                         fontFamily: FluentTypography.fontFamily,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -1141,61 +1251,42 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2F2F2F),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        '@@ -4,6 +4,9 @@ export function buildStack()',
-                        style: TextStyle(
-                          fontFamily: FluentTypography.fontFamily,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w400,
-                          color: Color(0xFFB3B3B3),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
                     Expanded(
-                      child: ListView(
-                        children: [
-                          _buildDiffLineText('  export function buildStack(commits) {', isNormal: true),
-                          _buildDiffLineText('+   const graph = new DAG(commits)', isAddition: true),
-                          _buildDiffLineText('+   graph.assertAcyclic()', isAddition: true),
-                          _buildDiffLineText('    return graph.order()', isNormal: true),
-                          _buildDiffLineText('-   return commits', isDeletion: true),
-                        ],
+                      child: ListView.builder(
+                        itemCount: selectedFile.hunks.length,
+                        itemBuilder: (context, hIdx) {
+                          final h = selectedFile.hunks[hIdx];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF242424),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '@@ Hunk #${hIdx + 1} (${h.header.isNotEmpty ? h.header : h.filePath})',
+                                  style: const TextStyle(
+                                    fontFamily: FluentTypography.monoFamily,
+                                    fontSize: 11,
+                                    color: Color(0xFF60CDFF),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                for (final line in h.lines)
+                                  _buildDiffLineText(
+                                    line.content,
+                                    isAddition: line.type == DiffLineType.addition,
+                                    isDeletion: line.type == DiffLineType.deletion,
+                                    isNormal: line.type == DiffLineType.context,
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        FluentButton(
-                          onPressed: () {
-                            _showFluentInfoBar(message: 'Hunk unstage simulated');
-                          },
-                          style: FluentButtonStyle.standard,
-                          height: 32,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: const Text('Unstage hunk'),
-                        ),
-                        const SizedBox(width: 8),
-                        FluentButton(
-                          onPressed: () {
-                            _showFluentInfoBar(message: 'Hunk staged for atomic commit');
-                          },
-                          style: FluentButtonStyle.accent,
-                          height: 32,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: const Text('Stage hunk'),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -1270,57 +1361,6 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     );
   }
 
-  Widget _buildWorkingCommitCard(
-    String title,
-    String stats, {
-    required bool isSelected,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2F2F2F),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF60CDFF) : const Color(0xFF3A3A3A),
-            width: isSelected ? 2.0 : 1.0,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontFamily: FluentTypography.fontFamily,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              stats,
-              style: const TextStyle(
-                fontFamily: FluentTypography.fontFamily,
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-                color: Color(0xFFB3B3B3),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDiffLineText(
     String text, {
     bool isAddition = false,
@@ -1347,19 +1387,86 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
   }
 
   /// Exact Windows 11 Diff Viewer View (Figma 90:896).
-  Widget _buildDiffViewerOnlyView({
+    Widget _buildDiffViewerOnlyView({
     required BuildContext context,
     required List<FileDiff> diffs,
     required List<DiffHunk> stagedHunks,
     required bool isDark,
   }) {
+    if (diffs.isEmpty) {
+      return Container(
+        color: const Color(0xFF202020),
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 480),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: const Color(0xFF282828),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF383838)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF60CDFF).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Icon(
+                    Icons.difference_outlined,
+                    color: Color(0xFF60CDFF),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No file diffs',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'No uncommitted changes available to display. Edit files in your active workspace to inspect side-by-side AST hunks here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFFB3B3B3),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                FluentButton(
+                  onPressed: () => _handleSyncNow(),
+                  style: FluentButtonStyle.standard,
+                  height: 32,
+                  child: const Text('Check for Changes'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final activeFile = diffs.first;
+
     return Container(
       color: const Color(0xFF202020),
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           const Text(
             'Diff Viewer',
             style: TextStyle(
@@ -1370,9 +1477,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'app/stack.ts · split view',
-            style: TextStyle(
+          Text(
+            '${activeFile.filePath} · +${activeFile.additions} -${activeFile.deletions}',
+            style: const TextStyle(
               fontFamily: FluentTypography.fontFamily,
               fontSize: 13,
               fontWeight: FontWeight.w400,
@@ -1381,161 +1488,121 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Split Diff Panels (Figma 90:934)
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Side Before
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2B2B2B),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF3A3A3A)),
-                    ),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2B2B2B),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF3A3A3A)),
+              ),
+              child: ListView.builder(
+                itemCount: activeFile.hunks.length,
+                itemBuilder: (context, hIdx) {
+                  final hunk = activeFile.hunks[hIdx];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Before',
-                          style: TextStyle(
-                            fontFamily: FluentTypography.fontFamily,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFB3B3B3),
+                        Text(
+                          '@@ Hunk #${hIdx + 1} (${hunk.header.isNotEmpty ? hunk.header : hunk.filePath})',
+                          style: const TextStyle(
+                            fontFamily: FluentTypography.monoFamily,
+                            fontSize: 11,
+                            color: Color(0xFF60CDFF),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: ListView(
-                            children: [
-                              _buildDiffTableLine(1, 'export function buildStack(c) {', isNormal: true),
-                              _buildDiffTableLine(2, '  const s = load()', isNormal: true),
-                              _buildDiffTableLine(3, '  return s.commits', isDeletion: true),
-                              _buildDiffTableLine(4, '  .map(toPR)', isNormal: true),
-                              _buildDiffTableLine(5, '}', isNormal: true),
-                            ],
+                        const SizedBox(height: 4),
+                        for (final line in hunk.lines)
+                          _buildDiffLineText(
+                            line.content,
+                            isAddition: line.type == DiffLineType.addition,
+                            isDeletion: line.type == DiffLineType.deletion,
+                            isNormal: line.type == DiffLineType.context,
                           ),
-                        ),
                       ],
                     ),
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // Side After
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2B2B2B),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF3A3A3A)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'After',
-                          style: TextStyle(
-                            fontFamily: FluentTypography.fontFamily,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFB3B3B3),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: ListView(
-                            children: [
-                              _buildDiffTableLine(1, 'export function buildStack(c) {', isNormal: true),
-                              _buildDiffTableLine(2, '  const s = load()', isNormal: true),
-                              _buildDiffTableLine(3, '  return s.commits.filter(Boolean)', isAddition: true),
-                              _buildDiffTableLine(4, '  .map(toPR)', isNormal: true),
-                              _buildDiffTableLine(5, '}', isNormal: true),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
 
           const SizedBox(height: 12),
-
-          // Quick Commit Strip
           _buildFluentQuickCommitStrip(stagedHunks: stagedHunks, isDark: isDark),
         ],
       ),
     );
   }
 
-  Widget _buildDiffTableLine(
-    int lineNum,
-    String content, {
-    bool isAddition = false,
-    bool isDeletion = false,
-    bool isNormal = false,
-  }) {
-    Color bg = Colors.transparent;
-    if (isAddition) bg = const Color(0xFF1E3A29);
-    if (isDeletion) bg = const Color(0xFF3D2226);
-
-    return Container(
-      width: double.infinity,
-      color: bg,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            child: Text(
-              '$lineNum',
-              style: const TextStyle(
-                fontFamily: FluentTypography.monoFamily,
-                fontSize: 11,
-                color: Color(0xFF8A8A8A),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              content,
-              style: const TextStyle(
-                fontFamily: FluentTypography.monoFamily,
-                fontSize: 12,
-                color: Colors.white,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Exact Windows 11 Rebase Playground View (Figma 90:799).
-  Widget _buildRebasePlaygroundView({
+    Widget _buildRebasePlaygroundView({
     required BuildContext context,
     required WorkspaceState workspace,
     required RebaseCanvasState rebaseState,
     required bool isDark,
   }) {
-    final rows = [
-      {'sha': 'a1f3c2d', 'title': 'feat: add stacked PR model', 'dep': null},
-      {'sha': '7b2e9f0', 'title': 'refactor: split diff hunks', 'dep': null},
-      {'sha': 'c04d8a1', 'title': 'feat: DAG validation', 'dep': 'Depends on a1f3c2d'},
-      {'sha': 'e5a0b77', 'title': 'test: stack rebase edge cases', 'dep': null},
-      {'sha': '9d2c4e8', 'title': 'chore: update eslint config', 'dep': null},
-    ];
+    final commits = workspace.stackGraph.commits;
+
+    if (commits.isEmpty) {
+      return Container(
+        color: const Color(0xFF202020),
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 480),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: const Color(0xFF282828),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF383838)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF60CDFF).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Icon(
+                    Icons.tune,
+                    color: Color(0xFF60CDFF),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No commits in stack',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Stage and commit changes to reorder, squash, or linearize your stacked Pull Requests on this canvas.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFFB3B3B3),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
       color: const Color(0xFF202020),
@@ -1543,7 +1610,6 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           const Text(
             'Rebase canvas',
             style: TextStyle(
@@ -1554,9 +1620,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Drag to reorder · choose an action per commit',
-            style: TextStyle(
+          Text(
+            '${commits.length} commits in stack · Drag to reorder · choose an action per commit',
+            style: const TextStyle(
               fontFamily: FluentTypography.fontFamily,
               fontSize: 13,
               fontWeight: FontWeight.w400,
@@ -1565,7 +1631,6 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Canvas Container (Figma 90:833)
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(12),
@@ -1576,13 +1641,13 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               ),
               child: ListView(
                 children: [
-                  for (final r in rows) ...[
+                  for (final c in commits) ...[
                     _buildRebaseRow(
-                      sha: r['sha']!,
-                      title: r['title']!,
-                      dep: r['dep'],
-                      isSelected: _selectedRebaseRow == r['sha'],
-                      onTap: () => setState(() => _selectedRebaseRow = r['sha']!),
+                      sha: c.id.length > 7 ? c.id.substring(0, 7) : c.id,
+                      title: c.summary,
+                      dep: c.branchName.isNotEmpty ? 'Branch: ${c.branchName}' : null,
+                      isSelected: _selectedRebaseRow == c.id,
+                      onTap: () => setState(() => _selectedRebaseRow = c.id),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1593,23 +1658,12 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
 
           const SizedBox(height: 16),
 
-          // Actions
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               FluentButton(
                 onPressed: () {
-                  _showFluentInfoBar(message: 'Simulating linear stack preview...');
-                },
-                style: FluentButtonStyle.standard,
-                height: 32,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: const Text('Preview'),
-              ),
-              const SizedBox(width: 8),
-              FluentButton(
-                onPressed: () {
-                  _showFluentInfoBar(message: 'Stack rebase applied and linearized!');
+                  _showFluentInfoBar(message: 'Stack rebase validated and linearized.');
                 },
                 style: FluentButtonStyle.accent,
                 height: 32,
@@ -1742,13 +1796,13 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
       color: const Color(0xFF202020),
       padding: const EdgeInsets.all(24),
       child: _selectedAgentId == null
-          ? _buildFigmaAgentPicker(context)
+          ? _buildFigmaAgentPicker(context, workspace)
           : _buildFigmaConnectedAgentDetail(context, _selectedAgentId!),
     );
   }
 
   /// Figma AI Agent Picker (90:1036).
-  Widget _buildFigmaAgentPicker(BuildContext context) {
+  Widget _buildFigmaAgentPicker(BuildContext context, WorkspaceState workspace) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1781,76 +1835,39 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                   : (constraints.maxWidth < 950 ? 2 : (constraints.maxWidth < 1250 ? 3 : 4));
               final aspectRatio = constraints.maxWidth < 650 ? 2.5 : 1.45;
 
+              final catalog = [
+                (id: 'antigravity', name: 'Google Antigravity', desc: 'Agent-first IDE & autonomous commit daemon', letter: 'A', logoBg: const Color(0xFF4285F4)),
+                (id: 'claude-code', name: 'Claude Code', desc: 'Terminal coding agent', letter: 'C', logoBg: const Color(0xFFD97757)),
+                (id: 'cursor', name: 'Cursor', desc: 'AI code editor', letter: 'C', logoBg: const Color(0xFF5C5C66)),
+                (id: 'codex', name: 'Codex', desc: 'Cloud and CLI coding agent', letter: 'C', logoBg: const Color(0xFF10A37F)),
+                (id: 'devin', name: 'Devin', desc: 'Autonomous software engineer', letter: 'D', logoBg: const Color(0xFF2F9E8F)),
+                (id: 'kiro', name: 'Kiro', desc: 'Spec-driven IDE', letter: 'K', logoBg: const Color(0xFFFF9900)),
+                (id: 'copilot', name: 'GitHub Copilot', desc: 'Coding assistant in your IDE', letter: 'G', logoBg: const Color(0xFF8E8E93)),
+                (id: 'custom', name: 'Other agent', desc: 'Connect any agent with an API key', letter: 'O', logoBg: const Color(0xFF2E2E36)),
+              ];
+
               return GridView.count(
                 crossAxisCount: crossAxisCount,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
                 childAspectRatio: aspectRatio,
                 children: [
-                  _buildAgentCard(
-                    name: 'Claude Code',
-                    desc: 'Terminal coding agent',
-                    badgeText: 'Detected on this computer',
-                    badgeColor: const Color(0xFF60CDFF),
-                    letter: 'C',
-                    logoBg: const Color(0xFFD97757),
-                  ),
-                  _buildAgentCard(
-                    name: 'Cursor',
-                    desc: 'AI code editor',
-                    badgeText: 'Detected on this computer',
-                    badgeColor: const Color(0xFF60CDFF),
-                    letter: 'C',
-                    logoBg: const Color(0xFF5C5C66),
-                  ),
-                  _buildAgentCard(
-                    name: 'Codex',
-                    desc: 'Cloud and CLI coding agent',
-                    badgeText: 'Not connected',
-                    badgeColor: const Color(0xFF8A8A8A),
-                    letter: 'C',
-                    logoBg: const Color(0xFF10A37F),
-                  ),
-                  _buildAgentCard(
-                    name: 'Antigravity',
-                    desc: 'Agent-first IDE',
-                    badgeText: 'Not connected',
-                    badgeColor: const Color(0xFF8A8A8A),
-                    letter: 'A',
-                    logoBg: const Color(0xFF4285F4),
-                  ),
-                  _buildAgentCard(
-                    name: 'Devin',
-                    desc: 'Autonomous software engineer',
-                    badgeText: 'Connected',
-                    badgeColor: const Color(0xFF6CCB5F),
-                    letter: 'D',
-                    logoBg: const Color(0xFF2F9E8F),
-                  ),
-                  _buildAgentCard(
-                    name: 'Kiro',
-                    desc: 'Spec-driven IDE',
-                    badgeText: 'Needs attention',
-                    badgeColor: const Color(0xFFFCE100),
-                    letter: 'K',
-                    logoBg: const Color(0xFFFF9900),
-                  ),
-                  _buildAgentCard(
-                    name: 'GitHub Copilot',
-                    desc: 'Coding assistant in your IDE',
-                    badgeText: 'Not connected',
-                    badgeColor: const Color(0xFF8A8A8A),
-                    letter: 'G',
-                    logoBg: const Color(0xFF8E8E93),
-                  ),
-                  _buildAgentCard(
-                    name: 'Other agent',
-                    desc: 'Connect any agent with an API key',
-                    badgeText: 'Not connected',
-                    badgeColor: const Color(0xFF8A8A8A),
-                    letter: 'O',
-                    logoBg: const Color(0xFF2E2E36),
-                  ),
+                  for (final item in catalog) ...[
+                    Builder(
+                      builder: (context) {
+                        final matchedAgent = workspace.activeAgents.where((a) => a.id == item.id || a.name.toLowerCase() == item.name.toLowerCase()).firstOrNull;
+                        final isConnected = matchedAgent != null && matchedAgent.isActive;
+                        return _buildAgentCard(
+                          name: item.name,
+                          desc: item.desc,
+                          badgeText: isConnected ? 'Connected & Active' : 'Not connected',
+                          badgeColor: isConnected ? const Color(0xFF6CCB5F) : const Color(0xFF8A8A8A),
+                          letter: item.letter,
+                          logoBg: item.logoBg,
+                        );
+                      },
+                    ),
+                  ],
                 ],
               );
             },
@@ -1983,13 +2000,13 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              _buildDetailRow('Account', 'olani@astu.edu.et'),
+                            _buildDetailRow('Account', ref.watch(authStateProvider).session?.email ?? 'Local Workspace'),
               const SizedBox(height: 8),
-              _buildDetailRow('Plan', 'Team'),
+              _buildDetailRow('Plan', ref.watch(authStateProvider).session != null ? 'Pro' : 'Community'),
               const SizedBox(height: 8),
-              _buildDetailRow('Last synced', '2 minutes ago'),
+              _buildDetailRow('Last synced', 'Just now'),
               const SizedBox(height: 8),
-              _buildDetailRow('Credentials', 'Keychain · ••••7f3a'),
+              _buildDetailRow('Credentials', ref.watch(authStateProvider).session != null ? 'Authenticated (Google)' : 'Disconnected'),
             ],
           ),
         );

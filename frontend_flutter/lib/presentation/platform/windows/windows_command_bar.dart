@@ -21,6 +21,7 @@ class WindowsCommandBar extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenShortcuts;
   final VoidCallback? onSignOut;
+  final VoidCallback? onSignIn;
 
   const WindowsCommandBar({
     super.key,
@@ -38,6 +39,7 @@ class WindowsCommandBar extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenShortcuts,
     this.onSignOut,
+    this.onSignIn,
   });
 
   @override
@@ -229,6 +231,7 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
             userSession: widget.userSession,
             onOpenSettings: widget.onOpenSettings,
             onSignOut: widget.onSignOut,
+            onSignIn: widget.onSignIn,
           ),
         ],
       ),
@@ -292,11 +295,13 @@ class _ClerkUserPill extends StatelessWidget {
   final ClerkUserSession? userSession;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onSignOut;
+  final VoidCallback? onSignIn;
 
   const _ClerkUserPill({
     required this.userSession,
     this.onOpenSettings,
     this.onSignOut,
+    this.onSignIn,
   });
 
   @override
@@ -305,15 +310,39 @@ class _ClerkUserPill extends StatelessWidget {
     final user = userSession;
 
     if (user == null) {
-      return const SizedBox.shrink();
+      return FluentButton(
+        onPressed: onSignIn,
+        style: FluentButtonStyle.accent,
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.login_rounded, size: 14, color: Colors.white),
+            SizedBox(width: 6),
+            Text(
+              'Sign In',
+              style: TextStyle(
+                fontFamily: FluentTypography.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
-    final avatarText = user.fullName.isNotEmpty
-        ? user.fullName.substring(0, 1).toUpperCase()
+    final displayName = user.fullName.isNotEmpty
+        ? user.fullName
+        : (user.email.isNotEmpty ? user.email.split('@')[0] : 'User');
+    final avatarText = displayName.isNotEmpty
+        ? displayName.substring(0, 1).toUpperCase()
         : 'U';
 
     return PopupMenuButton<String>(
-      tooltip: 'Clerk User Profile (${user.fullName})',
+      tooltip: 'User Profile ($displayName)',
       offset: const Offset(0, 36),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
@@ -436,7 +465,7 @@ class _ClerkUserPill extends StatelessWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 100),
               child: Text(
-                user.fullName,
+                displayName,
                 style: FluentTypography.bodyStrong.copyWith(
                   fontSize: 11.5,
                   color: isDark
