@@ -14,22 +14,33 @@ class WindowsAgentCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isConnected = agent.isActive;
+    final isAwaiting = agent.isAwaitingConfirmation;
     Color logoBg = const Color(0xFF4285F4);
     try {
       logoBg = Color(int.parse(agent.colorHex.replaceFirst('#', '0xFF')));
     } catch (_) {}
     final letter = agent.name.isNotEmpty ? agent.name[0].toUpperCase() : 'A';
+    final badgeColor = isConnected ? const Color(0xFF6CCB5F) : (isAwaiting ? const Color(0xFFF59E0B) : const Color(0xFF8A8A8A));
+    final badgeText = isConnected ? 'Connected & Active' : (isAwaiting ? 'Awaiting Approval...' : 'Not connected');
+    final actionText = isConnected ? 'Open IDE ↗' : (isAwaiting ? 'Confirm ↗' : 'Connect ↗');
+    final borderColor = isConnected ? const Color(0xFF6CCB5F) : (isAwaiting ? const Color(0xFFF59E0B) : const Color(0xFF3A3A3A));
 
     return GestureDetector(
-      onTap: () => !isConnected
-          ? WindowsAgentConnector.connect(ref: ref, context: context, agent: agent, repoPath: workspace.repositoryPath, showInfoBar: showInfoBar)
-          : WindowsAgentConnector.showOptions(context: context, ref: ref, agent: agent, repoPath: workspace.repositoryPath, showInfoBar: showInfoBar),
+      onTap: () {
+        if (isAwaiting) {
+          WindowsAgentConnector.showHandshakeDialog(context: context, ref: ref, agent: agent, showInfoBar: showInfoBar);
+        } else if (!isConnected) {
+          WindowsAgentConnector.connect(ref: ref, context: context, agent: agent, repoPath: workspace.repositoryPath, showInfoBar: showInfoBar);
+        } else {
+          WindowsAgentConnector.showOptions(context: context, ref: ref, agent: agent, repoPath: workspace.repositoryPath, showInfoBar: showInfoBar);
+        }
+      },
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: const Color(0xFF2B2B2B),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isConnected ? const Color(0xFF6CCB5F) : const Color(0xFF3A3A3A), width: isConnected ? 1.5 : 1),
+          border: Border.all(color: borderColor, width: (isConnected || isAwaiting) ? 1.5 : 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,12 +75,12 @@ class WindowsAgentCard extends ConsumerWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(color: const Color(0xFF3A3A3A), borderRadius: BorderRadius.circular(10)),
-                      child: Text(isConnected ? 'Connected & Active' : 'Not connected', style: TextStyle(fontFamily: FluentTypography.fontFamily, fontSize: 10, fontWeight: FontWeight.w500, color: isConnected ? const Color(0xFF6CCB5F) : const Color(0xFF8A8A8A)), overflow: TextOverflow.ellipsis),
+                      child: Text(badgeText, style: TextStyle(fontFamily: FluentTypography.fontFamily, fontSize: 10, fontWeight: FontWeight.w500, color: badgeColor), overflow: TextOverflow.ellipsis),
                     ),
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(isConnected ? 'Open IDE ↗' : 'Connect ↗', style: const TextStyle(fontFamily: FluentTypography.fontFamily, fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF60CDFF))),
+                Text(actionText, style: const TextStyle(fontFamily: FluentTypography.fontFamily, fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF60CDFF))),
               ],
             ),
           ],
