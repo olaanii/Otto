@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -1111,7 +1112,7 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 			return
 		}
 
-		cleanPath := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
+		cleanPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if cleanPath == "" || cleanPath == "." {
 			cleanPath = "index.html"
 		}
@@ -1151,6 +1152,11 @@ func launchAppWindow(url string) {
 	if os.Getenv("NO_OPEN") == "1" || os.Getenv("NO_OPEN") == "true" {
 		return
 	}
+	for _, arg := range os.Args[1:] {
+		if arg == "--daemon-only" || arg == "-d" {
+			return
+		}
+	}
 	go func() {
 		// Wait for server to bind
 		for i := 0; i < 25; i++ {
@@ -1162,7 +1168,23 @@ func launchAppWindow(url string) {
 			}
 		}
 
-		// 1. Try Microsoft Edge standalone application window mode
+		// 1. Try native Flutter Windows executable first
+		execPath, _ := os.Executable()
+		execDir := filepath.Dir(execPath)
+		flutterCandidates := []string{
+			filepath.Join(execDir, "frontend_flutter", "build", "windows", "x64", "runner", "Release", "otto_frontend.exe"),
+			`C:\Users\olani\Desktop\olani\Otto\frontend_flutter\build\windows\x64\runner\Release\otto_frontend.exe`,
+		}
+		for _, fp := range flutterCandidates {
+			if _, err := os.Stat(fp); err == nil {
+				cmd := exec.Command(fp)
+				cmd.Dir = filepath.Dir(fp)
+				_ = cmd.Start()
+				return
+			}
+		}
+
+		// 2. Try Microsoft Edge standalone application window mode
 		edgePaths := []string{
 			`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
 			`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
@@ -1172,13 +1194,6 @@ func launchAppWindow(url string) {
 				_ = exec.Command(ep, "--app="+url).Start()
 				return
 			}
-		}
-
-		// 2. Try Google Chrome standalone application window mode
-		chromePath := `C:\Program Files\Google\Chrome\Application\chrome.exe`
-		if _, err := os.Stat(chromePath); err == nil {
-			_ = exec.Command(chromePath, "--app="+url).Start()
-			return
 		}
 
 		// 3. Fallback to default browser
