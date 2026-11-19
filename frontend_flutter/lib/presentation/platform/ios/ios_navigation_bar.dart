@@ -35,12 +35,9 @@ class IosSliverNavigationBar extends StatelessWidget {
 
     return CupertinoSliverNavigationBar(
       automaticallyImplyLeading: automaticallyImplyLeading,
-      backgroundColor: IosColors.resolve(
-        isDark
-            ? const CupertinoDynamicColor.withSettings(color: Color(0xCC121212))
-            : const CupertinoDynamicColor.withSettings(color: Color(0xCCF8F8F8)),
-        context,
-      ),
+      backgroundColor: isDark
+          ? const Color(0xCC121212)
+          : const Color(0xCCF8F8F8),
       border: Border(
         bottom: BorderSide(
           color: IosColors.resolve(IosColors.separator, context),
@@ -118,12 +115,9 @@ class IosNavigationBar extends StatelessWidget implements ObstructingPreferredSi
     final isDark = IosCupertinoTheme.isDark(context);
 
     return CupertinoNavigationBar(
-      backgroundColor: IosColors.resolve(
-        isDark
-            ? const CupertinoDynamicColor.withSettings(color: Color(0xCC121212))
-            : const CupertinoDynamicColor.withSettings(color: Color(0xCCF8F8F8)),
-        context,
-      ),
+      backgroundColor: isDark
+          ? const Color(0xCC121212)
+          : const Color(0xCCF8F8F8),
       border: Border(
         bottom: BorderSide(
           color: IosColors.resolve(IosColors.separator, context),

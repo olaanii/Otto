@@ -111,8 +111,8 @@ class _IosDiffReviewViewState extends ConsumerState<_IosDiffReviewView> {
         ? workspace.uncommittedDiffs
         : workspace.uncommittedDiffs
             .map((f) => FileDiff(
+                  filePath: f.filePath,
                   oldPath: f.oldPath,
-                  newPath: f.newPath,
                   hunks: f.hunks
                       .where((h) => diffState.selectedHunkIds.contains(h.id))
                       .toList(),
@@ -279,7 +279,7 @@ class _IosDiffReviewViewState extends ConsumerState<_IosDiffReviewView> {
     DiffViewerNotifier diffNotifier,
     BuildContext context,
   ) {
-    final fileName = file.newPath.split('/').last;
+    final fileName = file.filePath.split('/').last;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -315,7 +315,7 @@ class _IosDiffReviewViewState extends ConsumerState<_IosDiffReviewView> {
                   ),
                 ),
                 Text(
-                  file.newPath,
+                  file.filePath,
                   style: IosTypography.caption2.copyWith(
                     color: IosColors.resolve(IosColors.secondaryLabel, context),
                   ),

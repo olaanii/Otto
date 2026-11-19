@@ -1,6 +1,5 @@
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
-import '../../domain/models/atomic_commit_unit.dart';
 import '../../domain/models/diff_hunk.dart';
 import '../../domain/models/llm_provider_config.dart';
 

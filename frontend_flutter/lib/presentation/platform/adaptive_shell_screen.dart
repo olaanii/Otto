@@ -297,7 +297,7 @@ class _PlatformPreviewSwitcherPillState extends ConsumerState<_PlatformPreviewSw
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   color: isSelected
                       ? activeColor
-                      : (isDark ? Colors.white80 : Colors.black87),
+                      : (isDark ? Colors.white70 : Colors.black87),
                 ),
               ),
             ],

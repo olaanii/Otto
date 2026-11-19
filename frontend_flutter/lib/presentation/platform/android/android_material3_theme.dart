@@ -328,7 +328,7 @@ class AndroidMaterial3Theme {
       ),
 
       // M3 Cards with 16px corner radii as required by specifications
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         clipBehavior: Clip.antiAlias,
         elevation: 1,
         color: colorScheme.surfaceContainerLow,
@@ -437,7 +437,7 @@ class AndroidMaterial3Theme {
       ),
 
       // Dialog Theme with 28px corners
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: colorScheme.surfaceContainerHigh,
         surfaceTintColor: colorScheme.surfaceTint,
         shape: RoundedRectangleBorder(

@@ -7,6 +7,11 @@ import 'package:google_fonts/google_fonts.dart';
 class IosColors {
   IosColors._();
 
+  /// Resolves any CupertinoDynamicColor to the current ambient brightness
+  static Color resolve(CupertinoDynamicColor dynamicColor, BuildContext context) {
+    return dynamicColor.resolveFrom(context);
+  }
+
   // --- Dynamic System Tint Colors (iOS 17/18 Spec) ---
 
   /// Standard iOS System Blue

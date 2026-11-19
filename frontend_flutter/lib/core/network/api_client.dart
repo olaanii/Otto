@@ -138,7 +138,7 @@ class ApiClient {
         return const NetworkException('Request was cancelled');
       case DioExceptionType.badCertificate:
         return const NetworkException('SSL Certificate validation failure');
-      case DioExceptionType.unknown:
+      default:
         return ServerException('Unexpected communication failure: $message');
     }
   }

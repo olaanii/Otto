@@ -19,22 +19,33 @@ class FluentMicaColors {
 
   // --- Dark Theme Mica & Acrylic ---
   static const Color micaBaseDark = Color(0xFF202020);
-  static const Color micaAltDark = Color(0xFF181818);
+  static const Color micaAltDark = Color(0xFF1B1B1B); // Figma Navigation pane background #1b1b1b
   static const Color acrylicBackgroundDark = Color(0xF0202020);
-  static const Color layerBackgroundDark = Color(0xFF2B2B2B);
-  static const Color layerBackgroundAltDark = Color(0xFF242424);
+  static const Color layerBackgroundDark = Color(0xFF2B2B2B); // Figma Panes & Cards #2b2b2b
+  static const Color layerBackgroundAltDark = Color(0xFF2F2F2F); // Figma Raised Card & Active Nav #2f2f2f
   static const Color subtleFillTransparentDark = Color(0x00FFFFFF);
   static const Color subtleFillSecondaryDark = Color(0x0DFFFFFF); // 5% white hover
   static const Color subtleFillTertiaryDark = Color(0x14FFFFFF); // 8% white pressed
 
+  // --- Figma Exact Surfaces & Controls ---
+  static const Color navBackground = Color(0xFF1B1B1B);
+  static const Color cardBackground = Color(0xFF2B2B2B);
+  static const Color cardRaised = Color(0xFF2F2F2F);
+  static const Color cardActive = Color(0xFF2A2A2E);
+  static const Color borderDefault = Color(0xFF3A3A3A);
+  static const Color borderInput = Color(0xFF484848);
+  static const Color inputBg = Color(0xFF3A3A3A);
+  static const Color buttonDefaultBg = Color(0xFF3A3A3A);
+  static const Color buttonPrimaryBg = Color(0xFF60CDFF);
+
   // --- Fluent Strokes & Borders ---
   static const Color cardStrokeLight = Color(0x0F000000); // 6% black outline
-  static const Color cardStrokeDark = Color(0x14FFFFFF); // 8% white outline
+  static const Color cardStrokeDark = Color(0xFF3A3A3A); // Figma 1px border #3a3a3a
   static const Color surfaceStrokeLight = Color(0x0D000000);
-  static const Color surfaceStrokeDark = Color(0x18FFFFFF);
+  static const Color surfaceStrokeDark = Color(0xFF484848); // Figma input border #484848
   static const Color dividerStrokeLight = Color(0x12000000);
-  static const Color dividerStrokeDark = Color(0x1AFFFFFF);
-  static const Color focusStroke = Color(0xFF0078D4);
+  static const Color dividerStrokeDark = Color(0xFF3A3A3A);
+  static const Color focusStroke = Color(0xFF60CDFF);
 
   // --- Fluent Text Colors ---
   static const Color textPrimaryLight = Color(0xE4000000); // 89% black
@@ -43,29 +54,45 @@ class FluentMicaColors {
   static const Color textDisabledLight = Color(0x5C000000); // 36% black
 
   static const Color textPrimaryDark = Color(0xFFFFFFFF); // 100% white
-  static const Color textSecondaryDark = Color(0xC5FFFFFF); // 78% white
-  static const Color textTertiaryDark = Color(0x8AFFFFFF); // 54% white
+  static const Color textSecondaryDark = Color(0xFFB3B3B3); // Figma secondary text #b3b3b3
+  static const Color textTertiaryDark = Color(0xFF8A8A8A); // Figma subtle/line counter #8a8a8a
   static const Color textDisabledDark = Color(0x5EFFFFFF); // 37% white
 
-  // --- Windows 11 System Accents (Otto Theme) ---
-  static const Color accentDefault = Color(0xFF0078D4); // Fluent Windows Blue
-  static const Color accentLight = Color(0xFF4CC2FF); // Fluent Cyan Blue (Dark mode accent)
-  static const Color accentDark = Color(0xFF005FB8); // Deep Blue
-  static const Color accentIndigo = Color(0xFF6366F1); // Otto primary indigo
-  static const Color accentIndigoDark = Color(0xFF4F46E5);
+  // --- Windows 11 System Accents (Otto Figma Theme) ---
+  static const Color accentDefault = Color(0xFF60CDFF); // Figma Cyan Accent #60cdff
+  static const Color accentLight = Color(0xFF60CDFF); // Figma Cyan Accent #60cdff
+  static const Color accentDark = Color(0xFF0078D4);
+  static const Color accentIndigo = Color(0xFF60CDFF);
+  static const Color accentIndigoDark = Color(0xFF0078D4);
 
-  // Status & Git Accents
-  static const Color gitAdded = Color(0xFF10B981); // Emerald
+  // Status & Git Accents from Figma
+  static const Color statusReady = Color(0xFF6CCB5F); // Figma Green #6ccb5f
+  static const Color statusDraft = Color(0xFFB3B3B3); // Figma Draft Grey #b3b3b3
+  static const Color statusInReview = Color(0xFFFCE100); // Figma Yellow #fce100
+  static const Color statusNeedsAttention = Color(0xFFFCE100);
+  static const Color statusNotConnected = Color(0xFF8A8A8A);
+  static const Color gitAdded = Color(0xFF6CCB5F); // Emerald
   static const Color gitAddedSubtleLight = Color(0xFFE6F4EA);
-  static const Color gitAddedSubtleDark = Color(0x2810B981);
+  static const Color gitAddedSubtleDark = Color(0x286CCB5F);
 
-  static const Color gitRemoved = Color(0xFFF43F5E); // Rose
+  static const Color gitRemoved = Color(0xFFFF8A80); // Rose / Danger
   static const Color gitRemovedSubtleLight = Color(0xFFFCE8E6);
-  static const Color gitRemovedSubtleDark = Color(0x28F43F5E);
+  static const Color gitRemovedSubtleDark = Color(0x28FF8A80);
 
-  static const Color gitModified = Color(0xFFF59E0B); // Amber
+  static const Color gitModified = Color(0xFFFCE100); // Amber
   static const Color gitModifiedSubtleLight = Color(0xFFFEF3C7);
-  static const Color gitModifiedSubtleDark = Color(0x28F59E0B);
+  static const Color gitModifiedSubtleDark = Color(0x28FCE100);
+
+  // Figma Exact Screen-Specific Tokens
+  static const Color diffAddedLine = Color(0xFF1E3A29); // Figma #1e3a29
+  static const Color diffDeletedLine = Color(0xFF3D2226); // Figma #3d2226
+  static const Color syncErrorBannerBg = Color(0xFF3A3210); // Figma #3a3210
+  static const Color syncErrorBannerBorder = Color(0xFF6B5A1E); // Figma #6b5a1e
+  static const Color syncErrorText = Color(0xFFFCE100); // Figma #fce100
+  static const Color dangerText = Color(0xFFFF8A80); // Figma #ff8a80
+  static const Color dangerBorder = Color(0xFF5A2A2E); // Figma #5a2a2e
+  static const Color shortcutKeycapBg = Color(0xFF383838); // Figma #383838
+  static const Color shortcutKeycapBorder = Color(0xFF4A4A4A); // Figma #4a4a4a
 
   // Windows Titlebar Control Hover Colors
   static const Color closeButtonHover = Color(0xFFC42B1C);
@@ -499,15 +526,14 @@ class _FluentButtonState extends State<FluentButton> {
         break;
 
       case FluentButtonStyle.standard:
-      default:
         bg = _isPressed
-            ? (isDark ? const Color(0xFF383838) : const Color(0xFFE8E8E8))
+            ? (isDark ? const Color(0xFF444444) : const Color(0xFFE8E8E8))
             : (_isHovered
-                ? (isDark ? const Color(0xFF323232) : const Color(0xFFF5F5F5))
+                ? (isDark ? const Color(0xFF404040) : const Color(0xFFF5F5F5))
                 : (isDark
-                    ? FluentMicaColors.layerBackgroundDark
+                    ? const Color(0xFF3A3A3A)
                     : FluentMicaColors.layerBackgroundLight));
-        border = isDark ? FluentMicaColors.cardStrokeDark : FluentMicaColors.cardStrokeLight;
+        border = isDark ? const Color(0xFF484848) : FluentMicaColors.cardStrokeLight;
         fg = isDark ? FluentMicaColors.textPrimaryDark : FluentMicaColors.textPrimaryLight;
         break;
     }

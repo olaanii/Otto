@@ -256,95 +256,99 @@ class VirtualDiffViewer extends ConsumerWidget {
           ),
         ),
       ),
-      child: Row(
-        children: [
-          // View Mode Selector
-          SegmentedButton<DiffViewMode>(
-            segments: const [
-              ButtonSegment(
-                value: DiffViewMode.unified,
-                label: Text('Unified', style: TextStyle(fontSize: 11)),
-                icon: Icon(Icons.reorder, size: 14),
-              ),
-              ButtonSegment(
-                value: DiffViewMode.split,
-                label: Text('Split', style: TextStyle(fontSize: 11)),
-                icon: Icon(Icons.vertical_split, size: 14),
-              ),
-            ],
-            selected: {diffState.mode},
-            onSelectionChanged: (set) => diffNotifier.setMode(set.first),
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Stage All in File
-          TextButton.icon(
-            onPressed: () => diffNotifier.selectAllHunks(activeFile.hunks),
-            icon: const Icon(Icons.select_all, size: 14),
-            label: const Text('Stage File', style: TextStyle(fontSize: 11)),
-          ),
-          TextButton(
-            onPressed: diffNotifier.clearSelection,
-            child: const Text('Clear', style: TextStyle(fontSize: 11)),
-          ),
-          const Spacer(),
-
-          // Atomic Guardrail LOC Counter
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isExceedingGuardrail
-                  ? (isDark ? AppColors.diffRemovedBgDark : AppColors.diffRemovedBgLight)
-                  : (isDark ? AppColors.zinc800 : AppColors.zinc200),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isExceedingGuardrail ? AppColors.rose500 : Colors.transparent,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isExceedingGuardrail ? Icons.warning_amber_rounded : Icons.speed,
-                  size: 13,
-                  color: isExceedingGuardrail
-                      ? AppColors.rose500
-                      : (isDark ? AppColors.zinc400 : AppColors.zinc600),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // View Mode Selector
+            SegmentedButton<DiffViewMode>(
+              segments: const [
+                ButtonSegment(
+                  value: DiffViewMode.unified,
+                  label: Text('Unified', style: TextStyle(fontSize: 11)),
+                  icon: Icon(Icons.reorder, size: 14),
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  '$totalStagedLoc / $maxLoc LOC',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: isExceedingGuardrail
-                        ? AppColors.rose500
-                        : (isDark ? AppColors.zinc200 : AppColors.zinc800),
-                  ),
+                ButtonSegment(
+                  value: DiffViewMode.split,
+                  label: Text('Split', style: TextStyle(fontSize: 11)),
+                  icon: Icon(Icons.vertical_split, size: 14),
                 ),
               ],
+              selected: {diffState.mode},
+              onSelectionChanged: (set) => diffNotifier.setMode(set.first),
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Commit Staged Lines Action Button
-          FilledButton.icon(
-            onPressed: totalStagedLoc > 0 ? onCommitRequested : null,
-            icon: const Icon(Icons.commit, size: 15),
-            label: Text(
-              'Commit Staged ($totalStagedLoc LOC)',
-              style: const TextStyle(fontSize: 12),
+            // Stage All in File
+            TextButton.icon(
+              onPressed: () => diffNotifier.selectAllHunks(activeFile.hunks),
+              icon: const Icon(Icons.select_all, size: 14),
+              label: const Text('Stage File', style: TextStyle(fontSize: 11)),
             ),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.indigo600,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            TextButton(
+              onPressed: diffNotifier.clearSelection,
+              child: const Text('Clear', style: TextStyle(fontSize: 11)),
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+
+            // Atomic Guardrail LOC Counter
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isExceedingGuardrail
+                    ? (isDark ? AppColors.diffRemovedBgDark : AppColors.diffRemovedBgLight)
+                    : (isDark ? AppColors.zinc800 : AppColors.zinc200),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isExceedingGuardrail ? AppColors.rose500 : Colors.transparent,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isExceedingGuardrail ? Icons.warning_amber_rounded : Icons.speed,
+                    size: 13,
+                    color: isExceedingGuardrail
+                        ? AppColors.rose500
+                        : (isDark ? AppColors.zinc400 : AppColors.zinc600),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$totalStagedLoc / $maxLoc LOC',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: isExceedingGuardrail
+                          ? AppColors.rose500
+                          : (isDark ? AppColors.zinc200 : AppColors.zinc800),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Commit Staged Lines Action Button
+            FilledButton.icon(
+              onPressed: totalStagedLoc > 0 ? onCommitRequested : null,
+              icon: const Icon(Icons.commit, size: 15),
+              label: Text(
+                'Commit Staged ($totalStagedLoc LOC)',
+                style: const TextStyle(fontSize: 12),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.indigo600,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
