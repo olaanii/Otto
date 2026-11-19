@@ -447,6 +447,11 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 			"title":              title,
 			"bodyBullets":        bullets,
 			"conventionalHeader": title,
+			"provider":           "google_antigravity",
+			"model":              "Gemini 3.8 Flash (High)",
+			"subscription":       "Google AI Pro Plan ($0 token fees)",
+			"author":             s.antigravity.User.Name,
+			"email":              s.antigravity.User.Email,
 		})
 	}
 	mux.HandleFunc("/llm/commit-message", commitMsgHandler)
@@ -469,9 +474,24 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 
 		s.mu.RLock()
 		targetDir := s.antigravity.WorktreePath
+		userEmail := s.antigravity.User.Email
+		userName := s.antigravity.User.Name
 		s.mu.RUnlock()
 
-		commitCmd := exec.Command("git", "-C", targetDir, "commit", "-m", body.Message)
+		author := ""
+		if userEmail != "" {
+			if userName == "" {
+				userName = "Olani Shambel"
+			}
+			author = fmt.Sprintf("%s <%s>", userName, userEmail)
+		}
+
+		var commitCmd *exec.Cmd
+		if author != "" {
+			commitCmd = exec.Command("git", "-C", targetDir, "commit", "--author", author, "-m", body.Message)
+		} else {
+			commitCmd = exec.Command("git", "-C", targetDir, "commit", "-m", body.Message)
+		}
 		commitOut, err := commitCmd.CombinedOutput()
 		sha := fmt.Sprintf("%x", time.Now().UnixNano())[:7]
 

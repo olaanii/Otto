@@ -122,4 +122,10 @@ func TestIntegrationsLlmEndpoints(t *testing.T) {
 	if title, _ := msgResp["title"].(string); title != "feat(auth): enforce PKCE entropy" {
 		t.Errorf("Expected conventional title, got %v", title)
 	}
+	if prov, _ := msgResp["provider"].(string); prov != "google_antigravity" {
+		t.Errorf("Expected provider google_antigravity, got %v", prov)
+	}
+	if sub, _ := msgResp["subscription"].(string); sub == "" {
+		t.Errorf("Expected non-empty subscription, got %v", sub)
+	}
 }
