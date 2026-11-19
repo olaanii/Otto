@@ -22,10 +22,9 @@ class OttoApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
       routes: {
         '/hud': (_) => const HudOverlayWindow(),
+        '/sign-in': (_) => const ClerkSignInScreen(),
       },
-      home: authState.isAuthenticated
-          ? const WindowsShellScreen()
-          : const ClerkSignInScreen(),
+      home: const WindowsShellScreen(),
     );
   }
 }

@@ -28,6 +28,15 @@ class ApiEndpoints {
   static const String clerkSession = '/auth/session';
   static const String clerkSignOut = '/auth/signout';
 
+  // Real Integrations
+  static const String githubConnect = '/api/github/connect';
+  static const String githubDisconnect = '/api/github/disconnect';
+  static const String githubUser = '/api/github/user';
+  static const String workspaceOpen = '/api/workspace/open';
+  static const String workspaceRecent = '/api/workspace/recent';
+  static const String llmConfigure = '/api/llm/configure';
+  static const String llmCommitMessage = '/llm/commit-message';
+
   // Compatibility aliases
   static const String workspaceState = state;
   static const String rawDiff = analyzeDiff;
