@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/api_endpoints.dart';
 import '../../../domain/models/atomic_commit_unit.dart';
 import '../../../domain/models/diff_hunk.dart';
 import '../../providers/auth_state_provider.dart';
@@ -129,6 +131,94 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
         message: 'Successfully pushed ${workspace.stackGraph.commits.length} atomic commits to GitHub!',
       );
     }
+  }
+
+  Future<void> _openPullRequest(Map<String, dynamic> branch) async {
+    final commit = branch['commit'] as AtomicCommitUnit?;
+    final prNum = commit?.prNumber;
+    String url = 'https://github.com';
+    if (prNum != null && prNum > 0) {
+      url = 'https://github.com/pulls';
+    }
+    await _openExternalBrowser(url);
+  }
+
+  Future<void> _openExternalBrowser(String url) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', url]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [url]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [url]);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _handleOpenRepository() async {
+    final controller = TextEditingController();
+    final client = ref.read(apiClientProvider);
+    String currentPath = '';
+    try {
+      final res = await client.get<Map<String, dynamic>>(ApiEndpoints.workspaceRecent);
+      currentPath = res.data?['current'] as String? ?? '';
+    } catch (_) {}
+    controller.text = currentPath;
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF242424),
+        title: const Text('Open Git Repository', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the directory path of a local Git repository:',
+              style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 12.5),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF1E1E1E),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                hintText: r'C:\Users\...\my-project',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final path = controller.text.trim();
+              if (path.isNotEmpty) {
+                Navigator.of(ctx).pop();
+                try {
+                  await client.post<Map<String, dynamic>>(
+                    ApiEndpoints.workspaceOpen,
+                    data: {'path': path},
+                  );
+                  await ref.read(workspaceProvider.notifier).refreshWorkspace();
+                  _showFluentInfoBar(message: 'Workspace opened: $path');
+                } catch (e) {
+                  _showFluentInfoBar(message: 'Failed to open repository: $e');
+                }
+              }
+            },
+            child: const Text('Open'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleSplitCommit(List<DiffHunk> stagedHunks) async {
@@ -344,6 +434,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                               },
                               onSignOut: () =>
                                   ref.read(authStateProvider.notifier).signOut(),
+                              onOpenRepository: _handleOpenRepository,
                             ),
 
                             // AI Streaming Ticker Bar
@@ -695,7 +786,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               ),
               const SizedBox(height: 20),
               FluentButton(
-                onPressed: _handleSyncNow,
+                onPressed: () => ref.read(workspaceProvider.notifier).refreshWorkspace(),
                 style: FluentButtonStyle.accent,
                 height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -844,11 +935,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               _buildPrDetailRow('Stack position', activeBranch['pos'] as String),
               const SizedBox(height: 18),
               FluentButton(
-                onPressed: () {
-                  _showFluentInfoBar(
-                    message: 'Opening pull request ${activeBranch['pr']} on GitHub...',
-                  );
-                },
+                onPressed: () => _openPullRequest(activeBranch),
                 style: FluentButtonStyle.accent,
                 height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1175,7 +1262,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               ),
               const SizedBox(height: 20),
               FluentButton(
-                onPressed: () => _handleSyncNow(),
+                onPressed: () => ref.read(workspaceProvider.notifier).refreshWorkspace(),
                 style: FluentButtonStyle.standard,
                 height: 32,
                 child: const Text('Refresh Working Tree'),
@@ -1213,6 +1300,8 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                     fd.filePath,
                     '${fd.hunks.length} hunks · +${fd.additions} -${fd.deletions}',
                     isChecked: _checkedFiles.contains(fd.filePath),
+                    isSelected: _selectedWorkingCommitIndex == idx,
+                    onSelect: () => setState(() => _selectedWorkingCommitIndex = idx),
                     onToggle: () => setState(() {
                       if (_checkedFiles.contains(fd.filePath)) {
                         _checkedFiles.remove(fd.filePath);
@@ -1302,60 +1391,68 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     String filename,
     String hunks, {
     required bool isChecked,
+    bool isSelected = false,
+    VoidCallback? onSelect,
     VoidCallback? onToggle,
   }) {
-    return InkWell(
-      onTap: onToggle,
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        child: Row(
-          children: [
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: isChecked ? const Color(0xFF60CDFF) : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: isChecked ? const Color(0xFF60CDFF) : const Color(0xFF9A9A9A),
+    return Container(
+      color: isSelected ? const Color(0xFF383838) : Colors.transparent,
+      child: InkWell(
+        onTap: onSelect ?? onToggle,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: onToggle,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: isChecked ? const Color(0xFF60CDFF) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: isChecked ? const Color(0xFF60CDFF) : const Color(0xFF9A9A9A),
+                    ),
+                  ),
+                  child: isChecked
+                      ? const Icon(Icons.check, size: 12, color: Colors.black)
+                      : null,
                 ),
               ),
-              child: isChecked
-                  ? const Icon(Icons.check, size: 12, color: Colors.black)
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    filename,
-                    style: const TextStyle(
-                      fontFamily: FluentTypography.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.white,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      filename,
+                      style: TextStyle(
+                        fontFamily: FluentTypography.fontFamily,
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    hunks,
-                    style: const TextStyle(
-                      fontFamily: FluentTypography.fontFamily,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: Color(0xFFB3B3B3),
+                    Text(
+                      hunks,
+                      style: const TextStyle(
+                        fontFamily: FluentTypography.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFFB3B3B3),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1447,7 +1544,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 ),
                 const SizedBox(height: 20),
                 FluentButton(
-                  onPressed: () => _handleSyncNow(),
+                  onPressed: () => ref.read(workspaceProvider.notifier).refreshWorkspace(),
                   style: FluentButtonStyle.standard,
                   height: 32,
                   child: const Text('Check for Changes'),
@@ -1886,7 +1983,13 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     required Color logoBg,
   }) {
     return GestureDetector(
-      onTap: () => setState(() => _selectedAgentId = name),
+      onTap: () {
+        setState(() => _selectedAgentId = name);
+        showDialog<void>(
+          context: context,
+          builder: (_) => const SettingsDialog(),
+        );
+      },
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
