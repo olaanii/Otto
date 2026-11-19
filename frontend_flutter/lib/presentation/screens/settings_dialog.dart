@@ -7,6 +7,8 @@ import '../../domain/models/guardrail_policy.dart';
 import '../providers/auth_state_provider.dart';
 import '../providers/llm_selector_provider.dart';
 import '../providers/workspace_provider.dart';
+import '../widgets/settings/antigravity_identity_tab.dart';
+import 'clerk_sign_in_screen.dart';
 
 /// Comprehensive Settings Modal with tabs for Git Guardrails, GitHub Account, and AI Models.
 class SettingsDialog extends ConsumerStatefulWidget {
@@ -31,6 +33,10 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
   String? _githubError;
   Map<String, dynamic>? _connectedGithubUser;
 
+  // Google Antigravity & Clerk
+  Map<String, dynamic>? _antigravityData;
+  bool _isSyncingAntigravity = false;
+
   // LLM Providers
   final _geminiKeyController = TextEditingController();
   final _anthropicKeyController = TextEditingController();
@@ -43,13 +49,14 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     final policy = ref.read(workspaceProvider).guardrailPolicy;
     _maxLoc = policy.maxLocPerCommit.toDouble();
     _maxFiles = policy.maxFilesPerCommit;
     _enforceConventional = policy.enforceConventionalCommits;
 
+    _fetchAntigravityStatus();
     _fetchGithubStatus();
     _fetchLlmProviders();
   }
@@ -64,6 +71,30 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
     _ollamaUrlController.dispose();
     _ollamaModelController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchAntigravityStatus() async {
+    try {
+      final resp = await ref.read(apiClientProvider).get<Map<String, dynamic>>(ApiEndpoints.antigravityStatus);
+      if (resp.data?['ok'] == true) setState(() => _antigravityData = resp.data);
+    } catch (_) {}
+  }
+
+  Future<void> _syncAntigravitySubscription() async {
+    setState(() => _isSyncingAntigravity = true);
+    try {
+      await _fetchAntigravityStatus();
+      await ref.read(authStateProvider.notifier).checkActiveSession();
+      await ref.read(llmSelectorProvider.notifier).loadProviders();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Google Antigravity subscription synced successfully.'),
+          backgroundColor: Color(0xFF2E7D32), duration: Duration(seconds: 2),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncingAntigravity = false);
+    }
   }
 
   Future<void> _fetchGithubStatus() async {
@@ -223,13 +254,16 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
             // Tab bar
             TabBar(
               controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               labelColor: AppColors.indigo500,
               unselectedLabelColor: isDark ? AppColors.zinc400 : AppColors.zinc600,
               indicatorColor: AppColors.indigo500,
               tabs: const [
-                Tab(icon: Icon(Icons.security_rounded, size: 18), text: 'Guardrails'),
-                Tab(icon: Icon(Icons.hub_rounded, size: 18), text: 'GitHub Account'),
-                Tab(icon: Icon(Icons.smart_toy_rounded, size: 18), text: 'AI Models & Agents'),
+                Tab(icon: Icon(Icons.verified_user_rounded, size: 16), text: 'Antigravity Identity'),
+                Tab(icon: Icon(Icons.smart_toy_rounded, size: 16), text: 'AI Models'),
+                Tab(icon: Icon(Icons.hub_rounded, size: 16), text: 'GitHub'),
+                Tab(icon: Icon(Icons.security_rounded, size: 16), text: 'Guardrails'),
               ],
             ),
             const SizedBox(height: 16),
@@ -239,9 +273,10 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildGuardrailsTab(isDark),
-                  _buildGithubTab(isDark),
+                  _buildAntigravityTab(isDark),
                   _buildLlmTab(isDark),
+                  _buildGithubTab(isDark),
+                  _buildGuardrailsTab(isDark),
                 ],
               ),
             ),
@@ -458,6 +493,18 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
     );
   }
 
+  Widget _buildAntigravityTab(bool isDark) {
+    final authState = ref.watch(authStateProvider);
+    return AntigravityIdentityTab(
+      user: authState.session,
+      isConnected: authState.isAuthenticated || (_antigravityData?['connected'] == true),
+      antigravityData: _antigravityData, isSyncing: _isSyncingAntigravity,
+      onSync: _syncAntigravitySubscription,
+      onReauthenticate: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ClerkSignInScreen())),
+      isDark: isDark,
+    );
+  }
+
   Widget _buildLlmTab(bool isDark) {
     return SingleChildScrollView(
       child: Column(
@@ -477,6 +524,27 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
             style: TextStyle(fontSize: 12, color: isDark ? AppColors.zinc400 : AppColors.zinc600),
           ),
           const SizedBox(height: 16),
+
+          // Google Antigravity Primary Subscription Banner
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFF1B2A1B), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF2E7D32))),
+            child: Row(children: [
+              const Icon(Icons.verified_rounded, color: Color(0xFF81C784), size: 24),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Row(children: [
+                  Text('Google Antigravity (Pro Subscription)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.white)),
+                  SizedBox(width: 8),
+                  Text('PRIMARY DEFAULT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF81C784))),
+                ]),
+                const SizedBox(height: 2),
+                Text('Active Model: Gemini 3.8 Flash (High) • \$0 extra token fees', style: TextStyle(fontSize: 11, color: isDark ? AppColors.zinc300 : AppColors.zinc700)),
+                Text('Autonomous commit slicing routes directly through your Google Antigravity session.', style: TextStyle(fontSize: 10.5, color: isDark ? AppColors.zinc400 : AppColors.zinc600)),
+              ])),
+            ]),
+          ),
+          const SizedBox(height: 14),
 
           // Gemini
           _buildProviderCard(
