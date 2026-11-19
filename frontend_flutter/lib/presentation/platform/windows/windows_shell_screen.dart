@@ -159,9 +159,12 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     final controller = TextEditingController();
     final client = ref.read(apiClientProvider);
     String currentPath = '';
+    List<String> recents = [];
     try {
       final res = await client.get<Map<String, dynamic>>(ApiEndpoints.workspaceRecent);
       currentPath = res.data?['current'] as String? ?? '';
+      final rawRecents = res.data?['recent'] as List<dynamic>? ?? [];
+      recents = rawRecents.map((e) => e.toString()).toList();
     } catch (_) {}
     controller.text = currentPath;
 
@@ -171,26 +174,54 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF242424),
         title: const Text('Open Git Repository', style: TextStyle(color: Colors.white, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter the directory path of a local Git repository:',
-              style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 12.5),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: const Color(0xFF1E1E1E),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                hintText: r'C:\Users\...\my-project',
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter or select a local Git repository path:',
+                style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 12.5),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF1E1E1E),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  hintText: r'C:\Users\...\my-project',
+                ),
+              ),
+              if (recents.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                const Text('Recent Repositories:', style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 11.5)),
+                const SizedBox(height: 6),
+                for (final r in recents.take(4))
+                  InkWell(
+                    onTap: () => controller.text = r,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.history_rounded, size: 12, color: Color(0xFF60CDFF)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              r,
+                              style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -358,7 +389,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 // 1. Windows 11 Titlebar
                 WindowsTitleBar(
                   title: 'Otto',
-                  subtitle: 'Windows 11 Fluent Workspace • ${workspace.currentBranch}',
+                  subtitle: 'Windows 11 Fluent Workspace • ${workspace.repositoryName.isNotEmpty ? "${workspace.repositoryName} • " : ""}${workspace.currentBranch}',
                 ),
 
                 // 2. Main Navigation Rail + Workspace Canvas
@@ -399,11 +430,39 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                             // Top CommandBar
                             WindowsCommandBar(
                               currentBranch: workspace.currentBranch,
+                              repositoryName: workspace.repositoryName,
                               pendingCommitCount: workspace.stackGraph.commits.length,
                               isSyncing: workspace.isLoading,
                               isRefining: llmState.isRefining,
                               isAutoPilot: _isAutoPilot,
                               userSession: authState.session,
+                              isGithubConnected: workspace.isGithubConnected,
+                              githubUser: workspace.githubUser,
+                              githubAvatarUrl: workspace.githubAvatarUrl,
+                              activeModelName: llmState.selectedProvider.name,
+                              availableModels: llmState.providers.map((p) => p.name).toList(),
+                              onSelectModel: (name) {
+                                final match = llmState.providers.where((p) => p.name == name).firstOrNull;
+                                if (match != null) {
+                                  ref.read(llmSelectorProvider.notifier).selectProvider(match);
+                                }
+                              },
+                              onConnectGithub: () {
+                                showDialog<void>(
+                                  context: context,
+                                  builder: (_) => const SettingsDialog(),
+                                );
+                              },
+                              onDisconnectGithub: () async {
+                                final client = ref.read(apiClientProvider);
+                                try {
+                                  await client.post<void>(ApiEndpoints.githubDisconnect);
+                                  await ref.read(workspaceProvider.notifier).refreshWorkspace();
+                                  _showFluentInfoBar(message: 'GitHub account disconnected');
+                                } catch (e) {
+                                  _showFluentInfoBar(message: 'Failed to disconnect: $e');
+                                }
+                              },
                               onSyncNow: _handleSyncNow,
                               onRefineWithAi: () => ref
                                   .read(llmSelectorProvider.notifier)
@@ -1058,7 +1117,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               ),
               const SizedBox(height: 20),
               FluentButton(
-                onPressed: () => _handleSyncNow(),
+                onPressed: () => ref.read(workspaceProvider.notifier).refreshWorkspace(),
                 style: FluentButtonStyle.standard,
                 height: 32,
                 child: const Text('Check Remote Origin'),
@@ -1274,113 +1333,201 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     }
 
     final selectedFile = diffs[_selectedWorkingCommitIndex.clamp(0, diffs.length - 1)];
+    final diffState = ref.watch(diffViewerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 800;
         final filesWidth = isNarrow ? 200.0 : 280.0;
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Column(
           children: [
-            // Changed Files List
-            Container(
-              width: filesWidth,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2B2B2B),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF3A3A3A)),
-              ),
-              child: ListView.builder(
-                itemCount: diffs.length,
-                itemBuilder: (context, idx) {
-                  final fd = diffs[idx];
-                  return _buildWorkingFileItem(
-                    fd.filePath,
-                    '${fd.hunks.length} hunks · +${fd.additions} -${fd.deletions}',
-                    isChecked: _checkedFiles.contains(fd.filePath),
-                    isSelected: _selectedWorkingCommitIndex == idx,
-                    onSelect: () => setState(() => _selectedWorkingCommitIndex = idx),
-                    onToggle: () => setState(() {
-                      if (_checkedFiles.contains(fd.filePath)) {
-                        _checkedFiles.remove(fd.filePath);
-                      } else {
-                        _checkedFiles.add(fd.filePath);
-                      }
-                    }),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            // Diff Hunks Inspector
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2B2B2B),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF3A3A3A)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      selectedFile.filePath,
-                      style: const TextStyle(
-                        fontFamily: FluentTypography.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Changed Files List
+                  Container(
+                    width: filesWidth,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2B2B2B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF3A3A3A)),
                     ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: selectedFile.hunks.length,
-                        itemBuilder: (context, hIdx) {
-                          final h = selectedFile.hunks[hIdx];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF242424),
-                              borderRadius: BorderRadius.circular(6),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Changed Files (${diffs.length})',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Color(0xFFB3B3B3)),
                             ),
-                            padding: const EdgeInsets.all(8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '@@ Hunk #${hIdx + 1} (${h.header.isNotEmpty ? h.header : h.filePath})',
+                            TextButton(
+                              onPressed: () {
+                                final allHunks = diffs.expand((f) => f.hunks).toList();
+                                final isAllStaged = diffState.selectedHunkIds.length >= allHunks.length;
+                                if (isAllStaged) {
+                                  ref.read(diffViewerProvider.notifier).clearSelection();
+                                } else {
+                                  ref.read(diffViewerProvider.notifier).selectAllHunks(allHunks);
+                                }
+                              },
+                              child: Text(
+                                diffState.selectedHunkIds.isNotEmpty ? 'Unstage All' : 'Stage All',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF60CDFF)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(color: Color(0xFF3A3A3A), height: 8),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: diffs.length,
+                            itemBuilder: (context, idx) {
+                              final fd = diffs[idx];
+                              final isFileStaged = fd.hunks.isNotEmpty && fd.hunks.every((h) => diffState.selectedHunkIds.contains(h.id));
+                              return _buildWorkingFileItem(
+                                fd.filePath,
+                                '${fd.hunks.length} hunks · +${fd.additions} -${fd.deletions}',
+                                isChecked: isFileStaged,
+                                isSelected: _selectedWorkingCommitIndex == idx,
+                                onSelect: () => setState(() => _selectedWorkingCommitIndex = idx),
+                                onToggle: () {
+                                  if (isFileStaged) {
+                                    for (final h in fd.hunks) {
+                                      if (diffState.selectedHunkIds.contains(h.id)) {
+                                        ref.read(diffViewerProvider.notifier).toggleHunkSelection(h);
+                                      }
+                                    }
+                                  } else {
+                                    for (final h in fd.hunks) {
+                                      if (!diffState.selectedHunkIds.contains(h.id)) {
+                                        ref.read(diffViewerProvider.notifier).toggleHunkSelection(h);
+                                      }
+                                    }
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Diff Hunks Inspector
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2B2B2B),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF3A3A3A)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  selectedFile.filePath,
                                   style: const TextStyle(
-                                    fontFamily: FluentTypography.monoFamily,
-                                    fontSize: 11,
-                                    color: Color(0xFF60CDFF),
+                                    fontFamily: FluentTypography.fontFamily,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
-                                for (final line in h.lines)
-                                  _buildDiffLineText(
-                                    line.content,
-                                    isAddition: line.type == DiffLineType.addition,
-                                    isDeletion: line.type == DiffLineType.deletion,
-                                    isNormal: line.type == DiffLineType.context,
+                              ),
+                              Text(
+                                '${selectedFile.hunks.where((h) => diffState.selectedHunkIds.contains(h.id)).length} of ${selectedFile.hunks.length} hunks staged',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF60CDFF),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: selectedFile.hunks.length,
+                              itemBuilder: (context, hIdx) {
+                                final h = selectedFile.hunks[hIdx];
+                                final isHunkStaged = diffState.selectedHunkIds.contains(h.id);
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF242424),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: isHunkStaged ? Border.all(color: const Color(0xFF60CDFF).withOpacity(0.5)) : null,
                                   ),
-                              ],
+                                  padding: const EdgeInsets.all(8),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Checkbox(
+                                            value: isHunkStaged,
+                                            activeColor: const Color(0xFF60CDFF),
+                                            onChanged: (_) => ref.read(diffViewerProvider.notifier).toggleHunkSelection(h),
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              '@@ Hunk #${hIdx + 1} (${h.header.isNotEmpty ? h.header : h.filePath})',
+                                              style: const TextStyle(
+                                                fontFamily: FluentTypography.monoFamily,
+                                                fontSize: 11,
+                                                color: Color(0xFF60CDFF),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          TextButton(
+                                            onPressed: () => ref.read(diffViewerProvider.notifier).toggleHunkSelection(h),
+                                            child: Text(
+                                              isHunkStaged ? 'Unstage' : 'Stage Hunk',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isHunkStaged ? const Color(0xFF6CCB5F) : const Color(0xFF60CDFF),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      for (final line in h.lines)
+                                        _buildDiffLineText(
+                                          line.content,
+                                          isAddition: line.type == DiffLineType.addition,
+                                          isDeletion: line.type == DiffLineType.deletion,
+                                          isNormal: line.type == DiffLineType.context,
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 12),
+            _buildFluentQuickCommitStrip(stagedHunks: stagedHunks, isDark: isDark),
           ],
         );
       },
@@ -1556,34 +1703,129 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
       );
     }
 
-    final activeFile = diffs.first;
+    final activeFile = diffs[_selectedWorkingCommitIndex.clamp(0, diffs.length - 1)];
+    final diffState = ref.watch(diffViewerProvider);
 
     return Container(
       color: const Color(0xFF202020),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Diff Viewer',
-            style: TextStyle(
-              fontFamily: FluentTypography.fontFamily,
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Diff Viewer',
+                    style: TextStyle(
+                      fontFamily: FluentTypography.fontFamily,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${activeFile.filePath} · +${activeFile.additions} -${activeFile.deletions} (${diffs.length} changed files)',
+                    style: const TextStyle(
+                      fontFamily: FluentTypography.fontFamily,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFFB3B3B3),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      final allHunks = diffs.expand((f) => f.hunks).toList();
+                      final isAllStaged = diffState.selectedHunkIds.length >= allHunks.length;
+                      if (isAllStaged) {
+                        ref.read(diffViewerProvider.notifier).clearSelection();
+                      } else {
+                        ref.read(diffViewerProvider.notifier).selectAllHunks(allHunks);
+                      }
+                    },
+                    icon: Icon(
+                      diffState.selectedHunkIds.isNotEmpty ? Icons.clear_all_rounded : Icons.select_all_rounded,
+                      size: 14,
+                      color: const Color(0xFF60CDFF),
+                    ),
+                    label: Text(
+                      diffState.selectedHunkIds.isNotEmpty ? 'Unstage All' : 'Stage All Hunks',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF60CDFF)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${activeFile.filePath} · +${activeFile.additions} -${activeFile.deletions}',
-            style: const TextStyle(
-              fontFamily: FluentTypography.fontFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: Color(0xFFB3B3B3),
+          const SizedBox(height: 12),
+
+          // File Selector Tabs
+          if (diffs.length > 1) ...[
+            SizedBox(
+              height: 32,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: diffs.length,
+                itemBuilder: (context, fIdx) {
+                  final isSelected = _selectedWorkingCommitIndex == fIdx;
+                  final f = diffs[fIdx];
+                  final parts = f.filePath.replaceAll(r'\', '/').split('/');
+                  final shortName = parts.isNotEmpty ? parts.last : f.filePath;
+                  final stagedCount = f.hunks.where((h) => diffState.selectedHunkIds.contains(h.id)).length;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedWorkingCommitIndex = fIdx),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF383838) : const Color(0xFF262626),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF60CDFF) : const Color(0xFF3A3A3A),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            shortName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              color: Colors.white,
+                            ),
+                          ),
+                          if (stagedCount > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF60CDFF).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$stagedCount',
+                                style: const TextStyle(fontSize: 10, color: Color(0xFF60CDFF)),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 12),
+          ],
 
           Expanded(
             child: Container(
@@ -1597,18 +1839,47 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                 itemCount: activeFile.hunks.length,
                 itemBuilder: (context, hIdx) {
                   final hunk = activeFile.hunks[hIdx];
+                  final isHunkStaged = diffState.selectedHunkIds.contains(hunk.id);
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF242424),
+                      borderRadius: BorderRadius.circular(6),
+                      border: isHunkStaged ? Border.all(color: const Color(0xFF60CDFF).withOpacity(0.5)) : null,
+                    ),
+                    padding: const EdgeInsets.all(8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '@@ Hunk #${hIdx + 1} (${hunk.header.isNotEmpty ? hunk.header : hunk.filePath})',
-                          style: const TextStyle(
-                            fontFamily: FluentTypography.monoFamily,
-                            fontSize: 11,
-                            color: Color(0xFF60CDFF),
-                          ),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: isHunkStaged,
+                              activeColor: const Color(0xFF60CDFF),
+                              onChanged: (_) => ref.read(diffViewerProvider.notifier).toggleHunkSelection(hunk),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '@@ Hunk #${hIdx + 1} (${hunk.header.isNotEmpty ? hunk.header : hunk.filePath})',
+                                style: const TextStyle(
+                                  fontFamily: FluentTypography.monoFamily,
+                                  fontSize: 11,
+                                  color: Color(0xFF60CDFF),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => ref.read(diffViewerProvider.notifier).toggleHunkSelection(hunk),
+                              child: Text(
+                                isHunkStaged ? 'Unstage' : 'Stage Hunk',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isHunkStaged ? const Color(0xFF6CCB5F) : const Color(0xFF60CDFF),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         for (final line in hunk.lines)
@@ -1759,8 +2030,15 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               FluentButton(
-                onPressed: () {
-                  _showFluentInfoBar(message: 'Stack rebase validated and linearized.');
+                onPressed: () async {
+                  final ok = await ref.read(rebaseCanvasProvider.notifier).executeRebase();
+                  if (ok) {
+                    await ref.read(workspaceProvider.notifier).refreshWorkspace();
+                    _showFluentInfoBar(message: 'Stack rebase validated and executed successfully.');
+                  } else {
+                    final err = ref.read(rebaseCanvasProvider).errorMessage ?? 'Rebase failed';
+                    _showFluentInfoBar(message: 'Rebase error: $err');
+                  }
                 },
                 style: FluentButtonStyle.accent,
                 height: 32,
