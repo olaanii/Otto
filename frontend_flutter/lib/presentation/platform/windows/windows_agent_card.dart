@@ -7,7 +7,7 @@ import '../../providers/workspace_provider.dart';
 class WindowsAgentCard extends ConsumerWidget {
   final IdeAgentProfile agent;
   final WorkspaceState workspace;
-  final void Function(String message, {bool isError}) showInfoBar;
+  final void Function({required String message, bool isError}) showInfoBar;
 
   const WindowsAgentCard({super.key, required this.agent, required this.workspace, required this.showInfoBar});
 
