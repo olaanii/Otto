@@ -182,6 +182,14 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
           if (rawRecent.isNotEmpty) {
             recents = rawRecent.map((e) => e.toString()).toList();
           }
+          if (data['ideProfiles'] is List) {
+            final profiles = (data['ideProfiles'] as List)
+                .map((p) => IdeAgentProfile.fromJson(p as Map<String, dynamic>))
+                .toList();
+            if (profiles.isNotEmpty) {
+              state = state.copyWith(activeAgents: profiles);
+            }
+          }
         } catch (_) {}
       }
 
