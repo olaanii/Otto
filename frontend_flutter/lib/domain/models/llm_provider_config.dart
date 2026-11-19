@@ -55,24 +55,32 @@ class LlmProviderConfig {
       };
 
   factory LlmProviderConfig.fromJson(Map<String, dynamic> json) => LlmProviderConfig(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        provider: json['provider'] as String,
-        modelId: json['modelId'] as String,
+        id: json['id'] as String? ?? 'antigravity',
+        name: json['name'] as String? ?? 'Google Antigravity (Pro Subscription)',
+        provider: json['provider'] as String? ?? 'google_antigravity',
+        modelId: json['modelId'] as String? ?? (json['model'] as String? ?? 'Gemini 3.8 Flash (High)'),
         isConfigured: json['isConfigured'] as bool? ?? false,
         temperature: (json['temperature'] as num?)?.toDouble() ?? 0.2,
         maxTokens: json['maxTokens'] as int? ?? 2048,
-        isDefault: json['isDefault'] as bool? ?? false,
+        isDefault: json['isDefault'] as bool? ?? (json['id'] == 'antigravity'),
       );
 
   static List<LlmProviderConfig> get standardProviders => const [
+        LlmProviderConfig(
+          id: 'antigravity',
+          name: 'Google Antigravity (Pro Subscription)',
+          provider: 'google_antigravity',
+          modelId: 'Gemini 3.8 Flash (High)',
+          isConfigured: true,
+          isDefault: true,
+        ),
         LlmProviderConfig(
           id: 'anthropic-sonnet-3-5',
           name: 'Claude 3.5 Sonnet',
           provider: 'anthropic',
           modelId: 'claude-3-5-sonnet-20241022',
           isConfigured: true,
-          isDefault: true,
+          isDefault: false,
         ),
         LlmProviderConfig(
           id: 'openai-gpt-4o',

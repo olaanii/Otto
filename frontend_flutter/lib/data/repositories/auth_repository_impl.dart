@@ -18,9 +18,11 @@ class AuthRepositoryImpl implements IAuthRepository {
   Future<ClerkUserSession> signInWithTicket(String ticket) async {
     try {
       final session = await authDataSource.verifyTicket(ticket);
-      await secureStorage.write(SecureStorageService.keyClerkToken, session.sessionToken);
-      await secureStorage.write(SecureStorageService.keyClerkJwt, session.jwt);
-      await secureStorage.write(SecureStorageService.keyUserId, session.userId);
+      try {
+        await secureStorage.write(SecureStorageService.keyClerkToken, session.sessionToken);
+        await secureStorage.write(SecureStorageService.keyClerkJwt, session.jwt);
+        await secureStorage.write(SecureStorageService.keyUserId, session.userId);
+      } catch (_) {}
       return session;
     } on ClerkAuthException catch (e) {
       throw AuthFailure(e.message, statusCode: e.statusCode, cause: e);
@@ -32,16 +34,27 @@ class AuthRepositoryImpl implements IAuthRepository {
   @override
   Future<ClerkUserSession?> getCurrentSession() async {
     try {
-      final token = await secureStorage.read(SecureStorageService.keyClerkToken);
+      String? token;
+      try {
+        token = await secureStorage.read(SecureStorageService.keyClerkToken);
+      } catch (_) {
+        token = null;
+      }
       final session = await authDataSource.validateSession(token ?? '');
       if (session == null) {
-        if (token != null) await secureStorage.clearSession();
+        if (token != null) {
+          try {
+            await secureStorage.clearSession();
+          } catch (_) {}
+        }
         return null;
       }
       if (token == null || token.isEmpty) {
-        await secureStorage.write(SecureStorageService.keyClerkToken, session.sessionToken);
-        await secureStorage.write(SecureStorageService.keyClerkJwt, session.jwt);
-        await secureStorage.write(SecureStorageService.keyUserId, session.userId);
+        try {
+          await secureStorage.write(SecureStorageService.keyClerkToken, session.sessionToken);
+          await secureStorage.write(SecureStorageService.keyClerkJwt, session.jwt);
+          await secureStorage.write(SecureStorageService.keyUserId, session.userId);
+        } catch (_) {}
       }
       return session;
     } catch (e) {
