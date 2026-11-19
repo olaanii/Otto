@@ -22,6 +22,7 @@ class WindowsCommandBar extends StatefulWidget {
   final VoidCallback? onOpenShortcuts;
   final VoidCallback? onSignOut;
   final VoidCallback? onSignIn;
+  final VoidCallback? onOpenRepository;
 
   const WindowsCommandBar({
     super.key,
@@ -40,6 +41,7 @@ class WindowsCommandBar extends StatefulWidget {
     this.onOpenShortcuts,
     this.onSignOut,
     this.onSignIn,
+    this.onOpenRepository,
   });
 
   @override
@@ -95,10 +97,11 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
       ),
       child: Row(
         children: [
-          // 1. Figma Input/ComboBox: Current Branch
+          // 1. Figma Input/ComboBox: Current Branch & Repository Selector
           _BranchPill(
             branch: widget.currentBranch,
-            tooltip: 'Active Git Branch: ${widget.currentBranch}',
+            tooltip: 'Active Git Branch: ${widget.currentBranch} (Click to open repository)',
+            onTap: widget.onOpenRepository,
           ),
 
           const SizedBox(width: 8),
@@ -222,6 +225,7 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
             onToggleHud: widget.onToggleHud,
             onOpenSettings: widget.onOpenSettings,
             onOpenShortcuts: widget.onOpenShortcuts,
+            onOpenRepository: widget.onOpenRepository,
           ),
 
           const SizedBox(width: 8),
@@ -243,47 +247,52 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
 class _BranchPill extends StatelessWidget {
   final String branch;
   final String tooltip;
+  final VoidCallback? onTap;
 
-  const _BranchPill({required this.branch, required this.tooltip});
+  const _BranchPill({required this.branch, required this.tooltip, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: Container(
-        height: 32,
-        width: 128,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A3A3A),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: const Color(0xFF484848),
-            width: 1,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          height: 32,
+          width: 128,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3A3A3A),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: const Color(0xFF484848),
+              width: 1,
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                branch,
-                style: const TextStyle(
-                  fontFamily: FluentTypography.fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  branch,
+                  style: const TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 14,
-              color: Color(0xFFB3B3B3),
-            ),
-          ],
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: Color(0xFFB3B3B3),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -497,12 +506,14 @@ class _OverflowMenuButton extends StatelessWidget {
   final VoidCallback? onToggleHud;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenShortcuts;
+  final VoidCallback? onOpenRepository;
 
   const _OverflowMenuButton({
     this.onOpenRebase,
     this.onToggleHud,
     this.onOpenSettings,
     this.onOpenShortcuts,
+    this.onOpenRepository,
   });
 
   @override
@@ -524,6 +535,16 @@ class _OverflowMenuButton extends StatelessWidget {
           ? FluentMicaColors.layerBackgroundDark
           : FluentMicaColors.layerBackgroundLight,
       itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'open_repo',
+          child: Row(
+            children: [
+              const Icon(Icons.folder_open_rounded, size: 14),
+              const SizedBox(width: 8),
+              Text('Open Git Repository...', style: FluentTypography.body.copyWith(fontSize: 12.5)),
+            ],
+          ),
+        ),
         PopupMenuItem(
           value: 'rebase',
           child: Row(
@@ -566,6 +587,7 @@ class _OverflowMenuButton extends StatelessWidget {
         ),
       ],
       onSelected: (val) {
+        if (val == 'open_repo') onOpenRepository?.call();
         if (val == 'rebase') onOpenRebase?.call();
         if (val == 'hud') onToggleHud?.call();
         if (val == 'shortcuts') onOpenShortcuts?.call();
