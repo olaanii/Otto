@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 // focusOttoDesktopWindow brings the Otto desktop app into active OS foreground focus.
@@ -64,8 +65,25 @@ func (s *DaemonServer) RegisterAgentHandshakeEndpoints(mux *http.ServeMux) {
 		if confirmed {
 			provisionOttoBridge(targetDir)
 			focusOttoDesktopWindow()
-			s.broadcastEvent("agent_connected", map[string]any{"agentId": body.AgentID, "confirmed": true})
-			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID, "connected": true})
+			discovered := s.DiscoverAgentProjects(body.AgentID)
+			s.mu.Lock()
+			for _, dp := range discovered {
+				found := false
+				for _, rw := range s.state.RecentWorkspaces {
+					if strings.EqualFold(rw, dp.Path) {
+						found = true
+						break
+					}
+				}
+				if !found && len(s.state.RecentWorkspaces) < 15 {
+					s.state.RecentWorkspaces = append(s.state.RecentWorkspaces, dp.Path)
+				}
+			}
+			s.saveStateLocked()
+			s.mu.Unlock()
+
+			s.broadcastEvent("agent_connected", map[string]any{"agentId": body.AgentID, "confirmed": true, "discoveredProjects": discovered})
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID, "connected": true, "discoveredProjects": discovered})
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)

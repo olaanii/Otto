@@ -144,10 +144,12 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		current := s.antigravity.WorktreePath
 		s.mu.RUnlock()
 
+		discovered := s.DiscoverAgentProjects("")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":      true,
-			"current": current,
-			"recent":  recent,
+			"ok":                 true,
+			"current":            current,
+			"recent":             recent,
+			"discoveredProjects": discovered,
 		})
 	})
 
@@ -632,6 +634,20 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		s.mu.Unlock()
 		s.broadcastEvent("agent_disconnected", map[string]any{"agentId": body.AgentID})
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agentId": body.AgentID})
+	})
+
+	// GET /api/agents/discovered-projects
+	mux.HandleFunc("/api/agents/discovered-projects", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		agentID := r.URL.Query().Get("agentId")
+		projects := s.DiscoverAgentProjects(agentID)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":       true,
+			"projects": projects,
+		})
 	})
 
 	s.RegisterAgentHandshakeEndpoints(mux)
