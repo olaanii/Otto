@@ -33,6 +33,9 @@ class WindowsNavigationView extends StatefulWidget {
   final ValueChanged<IdeAgentProfile>? onSliceAgentChanges;
   final ValueChanged<String>? onSearchChanged;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onAddRepository;
+  final List<String> recentProjects;
+  final ValueChanged<String>? onSelectProject;
   final bool initialCollapsed;
 
   const WindowsNavigationView({
@@ -45,6 +48,9 @@ class WindowsNavigationView extends StatefulWidget {
     this.onSliceAgentChanges,
     this.onSearchChanged,
     this.onOpenSettings,
+    this.onAddRepository,
+    this.recentProjects = const [],
+    this.onSelectProject,
     this.initialCollapsed = false,
   });
 
@@ -226,6 +232,35 @@ class _WindowsNavigationViewState extends State<WindowsNavigationView> {
                           onTap: () => widget.onAgentSelected?.call(agent),
                           onSlice: () => widget.onSliceAgentChanges?.call(agent),
                         ),
+                    ],
+
+                    // Figma Drop Zone Card (node 211:382)
+                    if (!isCompact && widget.onAddRepository != null) ...[
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: widget.onAddRepository,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          height: 56,
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF484848)),
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.create_new_folder_outlined, size: 16, color: Color(0xFF8A8A8A)),
+                              SizedBox(height: 4),
+                              Text(
+                                'Drop a folder to add a repository',
+                                style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 11),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ],
                 ),

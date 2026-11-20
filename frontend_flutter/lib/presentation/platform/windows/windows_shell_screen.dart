@@ -550,6 +550,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                                 instructions: 'Slice changes by ${agent.name}',
                               );
                         },
+                        onAddRepository: _handleOpenRepository,
+                        recentProjects: workspace.recentWorkspaces,
+                        onSelectProject: (proj) => _openRepositoryPath(proj),
                         onOpenSettings: () {
                           showDialog<void>(
                             context: context,
