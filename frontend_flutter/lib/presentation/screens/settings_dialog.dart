@@ -554,7 +554,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
           ),
           const SizedBox(height: 6),
           Text(
-            'Harness your existing flat-rate coding subscriptions via local CLIs ($0 token fees) or bring your own API key for pay-as-you-go providers.',
+            'Harness your existing flat-rate coding subscriptions via local CLIs (\$0 token fees) or bring your own API key for pay-as-you-go providers.',
             style: TextStyle(fontSize: 12, color: isDark ? AppColors.zinc400 : AppColors.zinc600),
           ),
           const SizedBox(height: 14),
@@ -563,7 +563,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
           Row(
             children: [
               ChoiceChip(
-                label: const Text('Local CLI Subscriptions ($0 Cost)'),
+                label: const Text('Local CLI Subscriptions (\$0 Cost)'),
                 selected: _llmArchitectureMode == 0,
                 onSelected: (val) {
                   if (val) setState(() => _llmArchitectureMode = 0);
