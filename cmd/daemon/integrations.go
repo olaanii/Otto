@@ -218,6 +218,7 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		s.mu.Lock()
 		s.state.GitHubConfig.Connected = true
 		s.state.GitHubConfig.Token = token
+		s.state.GitHubConfig.HasToken = (token != "")
 		s.state.GitHubConfig.UserLogin = ghUser.Login
 		s.state.GitHubConfig.UserName = ghUser.Name
 		s.state.GitHubConfig.AvatarURL = ghUser.AvatarURL
@@ -228,6 +229,7 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		}
 		s.saveStateLocked()
 		cfg := s.state.GitHubConfig
+		cfg.Token = ""
 		s.mu.Unlock()
 
 		s.broadcastEvent("github_connected", cfg)
@@ -252,6 +254,7 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		s.mu.Lock()
 		s.state.GitHubConfig.Connected = false
 		s.state.GitHubConfig.Token = ""
+		s.state.GitHubConfig.HasToken = false
 		s.state.GitHubConfig.UserLogin = ""
 		s.state.GitHubConfig.UserName = ""
 		s.state.GitHubConfig.AvatarURL = ""
