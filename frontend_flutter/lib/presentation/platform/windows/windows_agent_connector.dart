@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
@@ -26,8 +28,15 @@ class WindowsAgentConnector {
       final ok = res.data?['ok'] == true;
       if (ok) {
         await ref.read(workspaceProvider.notifier).refreshWorkspace();
+        final authUrl = res.data?['authUrl'] as String?;
         showInfoBar(message: 'Redirected to ${agent.name}. Please confirm connection.');
-        showHandshakeDialog(context: context, ref: ref, agent: agent, showInfoBar: showInfoBar);
+        showHandshakeDialog(
+          context: context,
+          ref: ref,
+          agent: agent,
+          authUrl: authUrl,
+          showInfoBar: showInfoBar,
+        );
       } else {
         showInfoBar(message: 'Failed to connect ${agent.name}', isError: true);
       }
@@ -40,37 +49,68 @@ class WindowsAgentConnector {
     required BuildContext context,
     required WidgetRef ref,
     required IdeAgentProfile agent,
+    String? authUrl,
     required void Function({required String message, bool isError}) showInfoBar,
   }) {
+    Timer? pollTimer;
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF242424),
-        title: Row(
-          children: [
-            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF60CDFF))),
-            const SizedBox(width: 8),
-            Text('Confirm in ${agent.name}', style: const TextStyle(color: Colors.white, fontSize: 15)),
-          ],
-        ),
-        content: Text('Otto opened the authorization prompt in ${agent.name}. Please confirm there to complete connection.', style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 12.5)),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close', style: TextStyle(color: Color(0xFF8A8A8A)))),
-          FilledButton(
-            onPressed: () async {
+      builder: (ctx) {
+        pollTimer ??= Timer.periodic(const Duration(milliseconds: 1500), (t) async {
+          await ref.read(workspaceProvider.notifier).refreshWorkspace();
+          final current = ref.read(workspaceProvider).activeAgents.where((a) => a.id == agent.id).firstOrNull;
+          if (current != null && current.isActive) {
+            t.cancel();
+            if (Navigator.of(ctx).canPop()) {
               Navigator.of(ctx).pop();
-              try {
-                await windowManager.show();
-                await windowManager.focus();
-              } catch (_) {}
-              await ref.read(workspaceProvider.notifier).refreshWorkspace();
-              showInfoBar(message: '${agent.name} connection confirmed & synchronized.');
-            },
-            child: const Text('I Have Confirmed ↗'),
+              showInfoBar(message: '${agent.name} connected successfully!');
+            }
+          }
+        });
+        return AlertDialog(
+          backgroundColor: const Color(0xFF242424),
+          title: Row(
+            children: [
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF60CDFF))),
+              const SizedBox(width: 8),
+              Text('Confirm in ${agent.name}', style: const TextStyle(color: Colors.white, fontSize: 15)),
+            ],
           ),
-        ],
-      ),
-    );
+          content: const Text(
+            'Otto opened the authorization prompt in your browser. Confirm there or click Open Browser below.',
+            style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 12.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                pollTimer?.cancel();
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF8A8A8A))),
+            ),
+            if (authUrl != null && authUrl.isNotEmpty)
+              TextButton.icon(
+                icon: const Icon(Icons.open_in_browser_rounded, size: 14),
+                label: const Text('Open Browser'),
+                onPressed: () => Process.run('cmd', ['/c', 'start', '', authUrl]),
+              ),
+            FilledButton(
+              onPressed: () async {
+                pollTimer?.cancel();
+                Navigator.of(ctx).pop();
+                try {
+                  await windowManager.show();
+                  await windowManager.focus();
+                } catch (_) {}
+                await ref.read(workspaceProvider.notifier).refreshWorkspace();
+                showInfoBar(message: '${agent.name} connection confirmed & synchronized.');
+              },
+              child: const Text('I Have Confirmed ↗'),
+            ),
+          ],
+        );
+      },
+    ).then((_) => pollTimer?.cancel());
   }
 
   static Future<void> disconnect({
