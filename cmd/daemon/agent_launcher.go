@@ -11,45 +11,42 @@ import (
 // launchAgentHandshake dispatches the IDE URI and opens the authorization confirmation page.
 func launchAgentHandshake(agentID string, targetDir string, token string) string {
 	authUrl := "http://localhost:3000/agents/authorize?agentId=" + agentID + "&token=" + token + "&workspace=" + url.QueryEscape(targetDir)
-	uri, cli := "", ""
-	switch agentID {
-	case "antigravity":
-		uri, cli = "antigravity://open?workspace="+targetDir, "agy"
-	case "cursor":
-		uri, cli = "cursor://file/"+filepath.ToSlash(targetDir), "cursor"
-	case "vscode":
-		uri, cli = "vscode://file/"+filepath.ToSlash(targetDir), "code"
-	case "windsurf":
-		uri, cli = "windsurf://file/"+filepath.ToSlash(targetDir), "windsurf"
-	default:
-		uri, cli = "antigravity://open?workspace="+targetDir, "agy"
-	}
 
 	go func() {
 		if runtime.GOOS == "windows" {
-			_ = exec.Command("cmd", "/c", "start", "", uri).Run()
-			if cli != "" {
-				_ = exec.Command("cmd", "/c", cli, targetDir).Run()
+			_ = exec.Command("cmd", "/c", "start", "", authUrl).Start()
+			switch agentID {
+			case "vscode":
+				_ = exec.Command("cmd", "/c", "code", targetDir).Start()
+			case "cursor":
+				_ = exec.Command("cmd", "/c", "cursor", targetDir).Start()
 			}
-			_ = exec.Command("cmd", "/c", "start", "", authUrl).Run()
 		} else if runtime.GOOS == "darwin" {
-			_ = exec.Command("open", authUrl).Run()
+			_ = exec.Command("open", authUrl).Start()
 		} else {
-			_ = exec.Command("xdg-open", authUrl).Run()
+			_ = exec.Command("xdg-open", authUrl).Start()
 		}
 	}()
 	return authUrl
 }
 
-// provisionOttoBridge ensures the agent rules file exists in the active workspace.
+// provisionOttoBridge ensures the authentic agent rules exist in the workspace and global config.
 func provisionOttoBridge(targetDir string) {
-	if targetDir == "" {
-		return
+	ruleContent := "# Otto Atomic Git & Workflow Rules for Antigravity\n\n" +
+		"Daemon Address: http://localhost:3000\n" +
+		"Events: POST /api/antigravity/events\n" +
+		"LOC Limit: <= 80 LOC per commit unit\n" +
+		"Plans: isolate in docs(plans) before implementation\n"
+
+	if targetDir != "" {
+		rulesDir := filepath.Join(targetDir, ".agents", "rules")
+		_ = os.MkdirAll(rulesDir, 0755)
+		_ = os.WriteFile(filepath.Join(rulesDir, "otto.md"), []byte(ruleContent), 0644)
 	}
-	rulesDir := filepath.Join(targetDir, ".agents", "rules")
-	_ = os.MkdirAll(rulesDir, 0755)
-	rulePath := filepath.Join(rulesDir, "otto.md")
-	if _, err := os.Stat(rulePath); os.IsNotExist(err) {
-		_ = os.WriteFile(rulePath, []byte("# Otto Bridge\nDaemon Address: http://localhost:3000\nEvents: POST /api/antigravity/events\n"), 0644)
+
+	if home, err := os.UserHomeDir(); err == nil {
+		globalRulesDir := filepath.Join(home, ".gemini", "config", "rules")
+		_ = os.MkdirAll(globalRulesDir, 0755)
+		_ = os.WriteFile(filepath.Join(globalRulesDir, "otto.md"), []byte(ruleContent), 0644)
 	}
 }
