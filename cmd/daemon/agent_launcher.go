@@ -6,21 +6,35 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
+
+// hasShellMetacharacters checks for characters that could lead to command injection in shell commands.
+func hasShellMetacharacters(s string) bool {
+	return strings.ContainsAny(s, "&|;`\"'<>^%!\r\n$")
+}
 
 // launchAgentHandshake dispatches the IDE URI and opens the authorization confirmation page.
 func launchAgentHandshake(agentID string, targetDir string, token string) string {
-	authUrl := "http://localhost:3000/agents/authorize?agentId=" + agentID + "&token=" + token + "&workspace=" + url.QueryEscape(targetDir)
+	cleanDir := filepath.Clean(targetDir)
+	authUrl := "http://localhost:3000/agents/authorize?agentId=" + agentID + "&token=" + token + "&workspace=" + url.QueryEscape(cleanDir)
 
 	go func() {
+		if cleanDir != "" && cleanDir != "." && !hasShellMetacharacters(cleanDir) {
+			if fi, err := os.Stat(cleanDir); err == nil && fi.IsDir() {
+				if runtime.GOOS == "windows" {
+					switch agentID {
+					case "vscode":
+						_ = exec.Command("cmd", "/c", "code", cleanDir).Start()
+					case "cursor":
+						_ = exec.Command("cmd", "/c", "cursor", cleanDir).Start()
+					}
+				}
+			}
+		}
+
 		if runtime.GOOS == "windows" {
 			_ = exec.Command("cmd", "/c", "start", "", authUrl).Start()
-			switch agentID {
-			case "vscode":
-				_ = exec.Command("cmd", "/c", "code", targetDir).Start()
-			case "cursor":
-				_ = exec.Command("cmd", "/c", "cursor", targetDir).Start()
-			}
 		} else if runtime.GOOS == "darwin" {
 			_ = exec.Command("open", authUrl).Start()
 		} else {
@@ -39,9 +53,14 @@ func provisionOttoBridge(targetDir string) {
 		"Plans: isolate in docs(plans) before implementation\n"
 
 	if targetDir != "" {
-		rulesDir := filepath.Join(targetDir, ".agents", "rules")
-		_ = os.MkdirAll(rulesDir, 0755)
-		_ = os.WriteFile(filepath.Join(rulesDir, "otto.md"), []byte(ruleContent), 0644)
+		cleanDir := filepath.Clean(targetDir)
+		if !hasShellMetacharacters(cleanDir) {
+			if fi, err := os.Stat(cleanDir); err == nil && fi.IsDir() {
+				rulesDir := filepath.Join(cleanDir, ".agents", "rules")
+				_ = os.MkdirAll(rulesDir, 0755)
+				_ = os.WriteFile(filepath.Join(rulesDir, "otto.md"), []byte(ruleContent), 0644)
+			}
+		}
 	}
 
 	if home, err := os.UserHomeDir(); err == nil {
