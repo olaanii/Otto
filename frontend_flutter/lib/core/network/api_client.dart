@@ -113,8 +113,14 @@ class ApiClient {
   Exception _handleDioError(DioException error) {
     final statusCode = error.response?.statusCode;
     final respData = error.response?.data;
-    final serverError = respData is Map ? (respData['error'] ?? respData['message'])?.toString() : null;
-    final message = serverError ?? error.message ?? 'Unknown network error';
+    final serverError = respData is Map
+        ? (respData['error'] ?? respData['message'] ?? respData['details'])?.toString()
+        : (respData is String && respData.trim().isNotEmpty ? respData.trim() : null);
+    final isVerboseDio = error.message?.contains('RequestOptions.validateStatus') == true;
+    final fallbackMsg = isVerboseDio
+        ? (statusCode != null ? 'HTTP $statusCode: ${error.response?.statusMessage ?? "Request could not be processed"}' : 'Request could not be processed')
+        : (error.message ?? 'Unknown network error');
+    final message = serverError ?? fallbackMsg;
 
     switch (error.type) {
       case DioExceptionType.connectionTimeout:

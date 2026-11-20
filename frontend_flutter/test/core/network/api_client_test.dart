@@ -37,4 +37,38 @@ void main() {
       expect(e.statusCode, 400);
     }
   });
+
+  test('ApiClient formats clean fallback for verbose Dio validateStatus errors', () async {
+    final dio = Dio();
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            type: DioExceptionType.badResponse,
+            message: 'This exception was thrown because the response has a status code of 400 and RequestOptions.validateStatus was configured to throw...',
+            response: Response(
+              requestOptions: options,
+              statusCode: 400,
+              statusMessage: 'Bad Request',
+              data: null,
+            ),
+          ),
+        );
+      },
+    ));
+
+    final client = ApiClient(
+      secureStorage: SecureStorageService(storage: const FlutterSecureStorage()),
+      customDio: dio,
+    );
+
+    try {
+      await client.post<dynamic>('/test-verbose');
+      fail('Expected ServerException');
+    } on ServerException catch (e) {
+      expect(e.message, contains('HTTP 400'));
+      expect(e.message, isNot(contains('RequestOptions.validateStatus')));
+    }
+  });
 }
