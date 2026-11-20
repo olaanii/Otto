@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../../core/platform/window_manager_service.dart';
 import 'windows_fluent_theme.dart';
+import 'windows_title_bar_widgets.dart';
 
 /// Authentic Windows 11 Custom Window Titlebar with caption controls,
 /// Mica/Acrylic tint, drag region, double-click maximize, and app branding.
@@ -13,6 +14,12 @@ class WindowsTitleBar extends StatefulWidget implements PreferredSizeWidget {
   final Widget? leading;
   final List<Widget>? customActions;
   final double height;
+  final VoidCallback? onBack;
+  final VoidCallback? onForward;
+  final VoidCallback? onOpenRepository;
+  final VoidCallback? onCommandSearch;
+  final VoidCallback? onToggleSidebar;
+  final String? userInitials;
 
   const WindowsTitleBar({
     super.key,
@@ -21,6 +28,12 @@ class WindowsTitleBar extends StatefulWidget implements PreferredSizeWidget {
     this.leading,
     this.customActions,
     this.height = 32.0,
+    this.onBack,
+    this.onForward,
+    this.onOpenRepository,
+    this.onCommandSearch,
+    this.onToggleSidebar,
+    this.userInitials = 'OS',
   });
 
   @override
@@ -76,12 +89,10 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       height: widget.height,
       decoration: const BoxDecoration(
-        color: Color(0xFF202020),
+        color: Color(0xFF1B1B1B),
         border: Border(
           bottom: BorderSide(
             color: Color(0xFF3A3A3A),
@@ -89,76 +100,156 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> with WindowListener {
           ),
         ),
       ),
-      child: Row(
-        children: [
-          // Left: App Brand & Icon
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (_) => _wm.startDragging(),
-            onDoubleTap: () => _wm.maximizeOrRestore(),
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12.0, right: 8.0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  widget.leading ??
-                      Container(
-                        width: 16,
-                        height: 16,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 950;
+          final isVeryNarrow = constraints.maxWidth < 650;
+
+          return Row(
+            children: [
+              // Left: Otto Logo & Navigation Controls (Figma node 211:249)
+              Padding(
+                padding: const EdgeInsets.only(left: 11.0, right: 6.0),
+                child: widget.leading ??
+                    Image.asset(
+                      'assets/images/otto_logo.png',
+                      width: 23,
+                      height: 24,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 23,
+                        height: 24,
                         decoration: BoxDecoration(
                           color: const Color(0xFF60CDFF),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                  const SizedBox(width: 8),
-                  Text(
-                    widget.title,
-                    style: const TextStyle(
-                      fontFamily: FluentTypography.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.white,
                     ),
+              ),
+
+              if (widget.title != 'Otto') ...[
+                Text(
+                  widget.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (widget.subtitle != null) ...[
+                Flexible(
+                  child: Text(
+                    widget.subtitle!,
+                    style: const TextStyle(color: Color(0xFF8A8A8A), fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
-                  if (widget.subtitle != null) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                      child: Text(
-                        '—',
-                        style: TextStyle(
-                          color: isDark
-                              ? FluentMicaColors.textTertiaryDark
-                              : FluentMicaColors.textTertiaryLight,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      widget.subtitle!,
-                      style: FluentTypography.caption.copyWith(
-                        color: isDark
-                            ? FluentMicaColors.textSecondaryDark
-                            : FluentMicaColors.textSecondaryLight,
-                        fontSize: 12,
-                      ),
+                ),
+                const SizedBox(width: 6),
+              ],
+
+              TitleNavArrow(
+                icon: Icons.chevron_left_rounded,
+                onPressed: widget.onBack,
+                tooltip: 'Back',
+              ),
+              TitleNavArrow(
+                icon: Icons.chevron_right_rounded,
+                onPressed: widget.onForward,
+                tooltip: 'Forward',
+              ),
+
+              if (!isNarrow) ...[
+                const SizedBox(width: 6),
+                TitleMenuButton(
+                  title: 'File',
+                  items: [
+                    PopupMenuItem(
+                      value: 'open_repo',
+                      onTap: widget.onOpenRepository,
+                      child: const Text('Open Repository...', style: TextStyle(fontSize: 12)),
                     ),
                   ],
-                ],
+                ),
+                const TitleMenuButton(
+                  title: 'Edit',
+                  items: [
+                    PopupMenuItem(value: 'undo', child: Text('Undo', style: TextStyle(fontSize: 12))),
+                    PopupMenuItem(value: 'redo', child: Text('Redo', style: TextStyle(fontSize: 12))),
+                  ],
+                ),
+                const TitleMenuButton(
+                  title: 'View',
+                  items: [
+                    PopupMenuItem(value: 'stacks', child: Text('Stacks (PRs)', style: TextStyle(fontSize: 12))),
+                    PopupMenuItem(value: 'diffs', child: Text('Diffs', style: TextStyle(fontSize: 12))),
+                    PopupMenuItem(value: 'agents', child: Text('AI Agents', style: TextStyle(fontSize: 12))),
+                  ],
+                ),
+                const TitleMenuButton(
+                  title: 'Help',
+                  items: [
+                    PopupMenuItem(value: 'docs', child: Text('Documentation', style: TextStyle(fontSize: 12))),
+                    PopupMenuItem(value: 'about', child: Text('About Otto', style: TextStyle(fontSize: 12))),
+                  ],
+                ),
+              ],
+
+              // Center: Flexible Draggable Area
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) => _wm.startDragging(),
+                  onDoubleTap: () => _wm.maximizeOrRestore(),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+
+              // Centered Command Search Box (Figma node 211:273)
+              if (!isVeryNarrow)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 380, minWidth: 120),
+                  child: CommandSearchPill(onTap: widget.onCommandSearch),
+                ),
+
+              // Flexible Draggable Area
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) => _wm.startDragging(),
+                  onDoubleTap: () => _wm.maximizeOrRestore(),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+
+              if (widget.onToggleSidebar != null)
+                TitleNavArrow(
+                  icon: Icons.view_sidebar_outlined,
+                  onPressed: widget.onToggleSidebar,
+                  tooltip: 'Toggle Sidebar',
+                ),
+
+          // Identity Avatar (Figma node 209:211)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: const BoxDecoration(
+                color: Color(0xFF0078D4),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                widget.userInitials ?? 'OS',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
 
-          // Center: Flexible Draggable Area
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanStart: (_) => _wm.startDragging(),
-              onDoubleTap: () => _wm.maximizeOrRestore(),
-              child: const SizedBox.expand(),
-            ),
-          ),
-
-          // Custom Actions (e.g. quick search or settings shortcut)
+          // Custom Actions
           if (widget.customActions != null) ...widget.customActions!,
 
           // Right: Windows 11 Caption Buttons
@@ -189,7 +280,9 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> with WindowListener {
                 ),
               ],
             ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
