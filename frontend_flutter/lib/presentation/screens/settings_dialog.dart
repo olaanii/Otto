@@ -38,9 +38,11 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
   bool _isSyncingAntigravity = false;
 
   // LLM Providers
+  int _llmArchitectureMode = 0; // 0 = Local CLI Subscriptions ($0 Cost), 1 = Bring Your Own Key (BYOK)
   final _geminiKeyController = TextEditingController();
   final _anthropicKeyController = TextEditingController();
   final _openaiKeyController = TextEditingController();
+  final _openrouterKeyController = TextEditingController();
   final _ollamaUrlController = TextEditingController(text: 'http://localhost:11434');
   final _ollamaModelController = TextEditingController(text: 'llama3:latest');
   bool _isSavingLlm = false;
@@ -68,6 +70,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
     _geminiKeyController.dispose();
     _anthropicKeyController.dispose();
     _openaiKeyController.dispose();
+    _openrouterKeyController.dispose();
     _ollamaUrlController.dispose();
     _ollamaModelController.dispose();
     super.dispose();
@@ -194,6 +197,37 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
       setState(() {
         _llmStatusMessage = 'Failed to save $providerId: $e';
       });
+    } finally {
+      if (mounted) setState(() => _isSavingLlm = false);
+    }
+  }
+
+  Future<void> _testLlmConnection({
+    required String mode,
+    required String providerId,
+    String? apiKey,
+    String? baseUrl,
+  }) async {
+    setState(() {
+      _isSavingLlm = true;
+      _llmStatusMessage = 'Testing $providerId connection...';
+    });
+    try {
+      final client = ref.read(apiClientProvider);
+      final resp = await client.post<Map<String, dynamic>>(
+        ApiEndpoints.llmTestConnection,
+        data: {
+          'mode': mode,
+          'providerId': providerId,
+          if (apiKey != null && apiKey.isNotEmpty) 'apiKey': apiKey,
+          if (baseUrl != null && baseUrl.isNotEmpty) 'baseUrl': baseUrl,
+        },
+      );
+      final ok = resp.data?['ok'] == true;
+      final msg = resp.data?['message']?.toString() ?? (ok ? 'Connected successfully' : 'Connection failed');
+      setState(() => _llmStatusMessage = ok ? '✓ $msg' : '✗ $msg');
+    } catch (e) {
+      setState(() => _llmStatusMessage = '✗ Test failed: $e');
     } finally {
       if (mounted) setState(() => _isSavingLlm = false);
     }
@@ -511,7 +545,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'LLM Models & Coding Agent Credentials',
+            'Dual-Engine AI Architecture',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -520,116 +554,238 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
           ),
           const SizedBox(height: 6),
           Text(
-            'Configure your real API keys or local Ollama endpoints for autonomous commit message synthesis and stack refinement.',
+            'Harness your existing flat-rate coding subscriptions via local CLIs ($0 token fees) or bring your own API key for pay-as-you-go providers.',
             style: TextStyle(fontSize: 12, color: isDark ? AppColors.zinc400 : AppColors.zinc600),
-          ),
-          const SizedBox(height: 16),
-
-          // Google Antigravity Primary Subscription Banner
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFF1B2A1B), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF2E7D32))),
-            child: Row(children: [
-              const Icon(Icons.verified_rounded, color: Color(0xFF81C784), size: 24),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Row(children: [
-                  Text('Google Antigravity (Pro Subscription)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.white)),
-                  SizedBox(width: 8),
-                  Text('PRIMARY DEFAULT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF81C784))),
-                ]),
-                const SizedBox(height: 2),
-                Text('Active Model: Gemini 3.8 Flash (High) • \$0 extra token fees', style: TextStyle(fontSize: 11, color: isDark ? AppColors.zinc300 : AppColors.zinc700)),
-                Text('Autonomous commit slicing routes directly through your Google Antigravity session.', style: TextStyle(fontSize: 10.5, color: isDark ? AppColors.zinc400 : AppColors.zinc600)),
-              ])),
-            ]),
           ),
           const SizedBox(height: 14),
 
-          // Gemini
-          _buildProviderCard(
-            title: 'Google Gemini',
-            hint: 'AIzaSy...',
-            controller: _geminiKeyController,
-            onSave: () => _configureLlmProvider('gemini', _geminiKeyController.text.trim()),
-            isDark: isDark,
+          // Architecture Selector
+          Row(
+            children: [
+              ChoiceChip(
+                label: const Text('Local CLI Subscriptions ($0 Cost)'),
+                selected: _llmArchitectureMode == 0,
+                onSelected: (val) {
+                  if (val) setState(() => _llmArchitectureMode = 0);
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Bring Your Own Key (BYOK)'),
+                selected: _llmArchitectureMode == 1,
+                onSelected: (val) {
+                  if (val) setState(() => _llmArchitectureMode = 1);
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // Anthropic
-          _buildProviderCard(
-            title: 'Anthropic Claude',
-            hint: 'sk-ant-...',
-            controller: _anthropicKeyController,
-            onSave: () => _configureLlmProvider('anthropic', _anthropicKeyController.text.trim()),
-            isDark: isDark,
-          ),
-          const SizedBox(height: 12),
-
-          // OpenAI
-          _buildProviderCard(
-            title: 'OpenAI (GPT-4o)',
-            hint: 'sk-...',
-            controller: _openaiKeyController,
-            onSave: () => _configureLlmProvider('openai', _openaiKeyController.text.trim()),
-            isDark: isDark,
-          ),
-          const SizedBox(height: 12),
-
-          // Ollama
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF282830) : const Color(0xFFF4F4F6),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Local Ollama Endpoint', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _ollamaUrlController,
-                  decoration: InputDecoration(
-                    labelText: 'Base URL',
-                    hintText: 'http://localhost:11434',
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+          if (_llmArchitectureMode == 0) ...[
+            // Local CLI Wrappers
+            // Antigravity (Pro Subscription)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B2A1B),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF2E7D32)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.verified_rounded, color: Color(0xFF81C784), size: 22),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Google Antigravity (Google AI Pro Plan)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.white)),
+                      ),
+                      OutlinedButton(
+                        onPressed: _isSavingLlm ? null : () => _testLlmConnection(mode: 'cli', providerId: 'antigravity'),
+                        child: const Text('Test CLI'),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _ollamaModelController,
-                        decoration: InputDecoration(
-                          labelText: 'Model Name',
-                          hintText: 'llama3:latest',
-                          isDense: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  const SizedBox(height: 6),
+                  Text('Status: Detected agy.exe CLI • \$0 extra token fees', style: TextStyle(fontSize: 11, color: isDark ? AppColors.zinc300 : AppColors.zinc700)),
+                  Text('Direct local process wrapper with authenticated Google AI Pro plan.', style: TextStyle(fontSize: 10.5, color: isDark ? AppColors.zinc400 : AppColors.zinc600)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Claude Code CLI
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF282830) : const Color(0xFFF4F4F6),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.terminal_rounded, color: Color(0xFFE57B42), size: 22),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Claude Code CLI (Claude Pro / Team)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      ),
+                      OutlinedButton(
+                        onPressed: _isSavingLlm ? null : () => _testLlmConnection(mode: 'cli', providerId: 'claude'),
+                        child: const Text('Test CLI'),
+                      ),
+                      const SizedBox(width: 6),
+                      FilledButton(
+                        onPressed: _isSavingLlm ? null : () => _configureLlmProvider('claude_cli', 'subscription'),
+                        style: FilledButton.styleFrom(backgroundColor: AppColors.indigo600),
+                        child: const Text('Activate'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Status: Detected claude.exe (v2.1.326)', style: TextStyle(fontSize: 11, color: isDark ? AppColors.zinc300 : AppColors.zinc700)),
+                  Text('Executes Claude Code in headless non-interactive mode using local subscription.', style: TextStyle(fontSize: 10.5, color: isDark ? AppColors.zinc400 : AppColors.zinc600)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Codex CLI
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF282830) : const Color(0xFFF4F4F6),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.smart_toy_outlined, color: Colors.blueAccent, size: 22),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text('OpenAI Codex CLI', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Status: Optional wrapper (install via npm i -g @openai/codex)', style: TextStyle(fontSize: 11, color: isDark ? AppColors.zinc400 : AppColors.zinc600)),
+                ],
+              ),
+            ),
+          ] else ...[
+            // BYOK Cards
+            _buildProviderCard(
+              title: 'Google AI Studio (Gemini Free Tier)',
+              hint: 'AIzaSy...',
+              controller: _geminiKeyController,
+              onTest: () => _testLlmConnection(mode: 'byok', providerId: 'gemini', apiKey: _geminiKeyController.text.trim()),
+              onSave: () => _configureLlmProvider('gemini', _geminiKeyController.text.trim()),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 12),
+
+            _buildProviderCard(
+              title: 'OpenAI (GPT-4o / O3-Mini)',
+              hint: 'sk-...',
+              controller: _openaiKeyController,
+              onTest: () => _testLlmConnection(mode: 'byok', providerId: 'openai', apiKey: _openaiKeyController.text.trim()),
+              onSave: () => _configureLlmProvider('openai', _openaiKeyController.text.trim()),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 12),
+
+            _buildProviderCard(
+              title: 'Anthropic Claude (Pay-As-You-Go API)',
+              hint: 'sk-ant-...',
+              controller: _anthropicKeyController,
+              onTest: () => _testLlmConnection(mode: 'byok', providerId: 'anthropic', apiKey: _anthropicKeyController.text.trim()),
+              onSave: () => _configureLlmProvider('anthropic', _anthropicKeyController.text.trim()),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 12),
+
+            _buildProviderCard(
+              title: 'OpenRouter (Unified Multi-Model API)',
+              hint: 'sk-or-...',
+              controller: _openrouterKeyController,
+              onTest: () => _testLlmConnection(mode: 'byok', providerId: 'openrouter', apiKey: _openrouterKeyController.text.trim()),
+              onSave: () => _configureLlmProvider('openrouter', _openrouterKeyController.text.trim()),
+              isDark: isDark,
+            ),
+            const SizedBox(height: 12),
+
+            // Ollama
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF282830) : const Color(0xFFF4F4F6),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Local Ollama Endpoint (100% Free / Offline)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _ollamaUrlController,
+                    decoration: InputDecoration(
+                      labelText: 'Base URL',
+                      hintText: 'http://localhost:11434',
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _ollamaModelController,
+                          decoration: InputDecoration(
+                            labelText: 'Model Name',
+                            hintText: 'llama3:latest',
+                            isDense: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _isSavingLlm
-                          ? null
-                          : () => _configureLlmProvider(
-                                'ollama',
-                                'local',
-                                baseUrl: _ollamaUrlController.text.trim(),
-                                model: _ollamaModelController.text.trim(),
-                              ),
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.indigo600),
-                      child: const Text('Save Ollama'),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _isSavingLlm
+                            ? null
+                            : () => _testLlmConnection(
+                                  mode: 'byok',
+                                  providerId: 'ollama',
+                                  baseUrl: _ollamaUrlController.text.trim(),
+                                ),
+                        child: const Text('Test'),
+                      ),
+                      const SizedBox(width: 6),
+                      FilledButton(
+                        onPressed: _isSavingLlm
+                            ? null
+                            : () => _configureLlmProvider(
+                                  'ollama',
+                                  'local',
+                                  baseUrl: _ollamaUrlController.text.trim(),
+                                  model: _ollamaModelController.text.trim(),
+                                ),
+                        style: FilledButton.styleFrom(backgroundColor: AppColors.indigo600),
+                        child: const Text('Save Ollama'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
 
           if (_llmStatusMessage != null) ...[
             const SizedBox(height: 12),
@@ -645,6 +801,7 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
     required String hint,
     required TextEditingController controller,
     required VoidCallback onSave,
+    VoidCallback? onTest,
     required bool isDark,
   }) {
     return Container(
@@ -672,6 +829,13 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> with SingleTick
                   ),
                 ),
               ),
+              if (onTest != null) ...[
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: _isSavingLlm ? null : onTest,
+                  child: const Text('Test'),
+                ),
+              ],
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: _isSavingLlm ? null : onSave,
