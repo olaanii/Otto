@@ -109,6 +109,15 @@ func TestIntegrationsLlmEndpoints(t *testing.T) {
 		t.Errorf("Expected 200 OK for /api/llm/configure, got %d", recConfig.Code)
 	}
 
+	// 2b. POST /api/llm/test-connection
+	testConnBody := []byte(`{"mode": "cli", "providerId": "antigravity"}`)
+	reqTestConn := httptest.NewRequest(http.MethodPost, "/api/llm/test-connection", bytes.NewReader(testConnBody))
+	recTestConn := httptest.NewRecorder()
+	mux.ServeHTTP(recTestConn, reqTestConn)
+	if recTestConn.Code != http.StatusOK {
+		t.Errorf("Expected 200 OK for /api/llm/test-connection, got %d", recTestConn.Code)
+	}
+
 	// 3. POST /llm/commit-message
 	hunksBody := []byte(`{"provider_id": "gemini", "hunks": [{"filePath": "src/auth/jwt.ts", "moduleScope": "auth", "intent": "feat", "summary": "enforce PKCE entropy", "additions": 20, "deletions": 2}]}`)
 	reqMsg := httptest.NewRequest(http.MethodPost, "/llm/commit-message", bytes.NewReader(hunksBody))

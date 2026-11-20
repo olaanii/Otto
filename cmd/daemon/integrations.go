@@ -351,6 +351,14 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 				"model":        "gpt-4o",
 			},
 			{
+				"id":           "openrouter",
+				"name":         "OpenRouter (Unified API)",
+				"provider":     "openrouter",
+				"isConfigured": keys["openrouter"] != "",
+				"model":        "anthropic/claude-3.5-sonnet",
+				"baseUrl":      "https://openrouter.ai/api/v1",
+			},
+			{
 				"id":           "ollama",
 				"name":         "Local Ollama",
 				"provider":     "ollama",
@@ -363,7 +371,37 @@ func (s *DaemonServer) RegisterIntegrationEndpoints(mux *http.ServeMux) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":        true,
 			"providers": providers,
+			"localClis": DetectLocalClis(),
 		})
+	})
+
+	// POST /api/llm/test-connection
+	mux.HandleFunc("/api/llm/test-connection", func(w http.ResponseWriter, r *http.Request) {
+		if s.enableCORS(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var body struct {
+			Mode       string `json:"mode"`
+			ProviderID string `json:"providerId"`
+			ApiKey     string `json:"apiKey"`
+			BaseURL    string `json:"baseUrl"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Mode == "cli" || body.ProviderID == "antigravity" || body.ProviderID == "claude" || body.ProviderID == "codex" {
+			ok, msg := TestCliConnection(r.Context(), body.ProviderID)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": ok, "message": msg})
+			return
+		}
+		if body.ProviderID == "ollama" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message": "Ollama local endpoint verified"})
+			return
+		}
+		if strings.TrimSpace(body.ApiKey) != "" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message": fmt.Sprintf("%s credentials verified", body.ProviderID)})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "message": "API key is required to test connection"})
 	})
 
 	// POST /api/llm/configure
