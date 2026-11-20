@@ -234,6 +234,53 @@ class _WindowsNavigationViewState extends State<WindowsNavigationView> {
                         ),
                     ],
 
+                    // Figma Projects Section (node 211:307)
+                    if (!isCompact && widget.recentProjects.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.folder_outlined, size: 13, color: Color(0xFF8A8A8A)),
+                            const SizedBox(width: 6),
+                            const Expanded(
+                              child: Text(
+                                'Projects',
+                                style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            if (widget.onAddRepository != null)
+                              InkWell(
+                                onTap: widget.onAddRepository,
+                                child: const Icon(Icons.add, size: 14, color: Color(0xFF8A8A8A)),
+                              ),
+                          ],
+                        ),
+                      ),
+                      for (final proj in widget.recentProjects.take(4))
+                        InkWell(
+                          onTap: () => widget.onSelectProject?.call(proj),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.folder_open_rounded, size: 14, color: Color(0xFFB3B3B3)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    proj.split(RegExp(r'[\\/]')).lastWhere((s) => s.isNotEmpty, orElse: () => proj),
+                                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+
                     // Figma Drop Zone Card (node 211:382)
                     if (!isCompact && widget.onAddRepository != null) ...[
                       const SizedBox(height: 12),
