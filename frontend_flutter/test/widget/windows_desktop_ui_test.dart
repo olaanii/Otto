@@ -433,6 +433,45 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('WindowsTitleBar renders Figma node 211:249 Studio Hybrid menus, command search, and logo cleanly', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      bool repoOpened = false;
+      bool commandSearched = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          home: Scaffold(
+            appBar: WindowsTitleBar(
+              onOpenRepository: () => repoOpened = true,
+              onCommandSearch: () => commandSearched = true,
+              userInitials: 'OS',
+            ),
+            body: Container(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('File'), findsOneWidget);
+      expect(find.text('Edit'), findsOneWidget);
+      expect(find.text('View'), findsOneWidget);
+      expect(find.text('Help'), findsOneWidget);
+      expect(find.text('Search commits, diffs, stacks…'), findsOneWidget);
+      expect(find.text('Ctrl+K'), findsOneWidget);
+      expect(find.text('OS'), findsOneWidget);
+
+      await tester.tap(find.text('Search commits, diffs, stacks…'));
+      await tester.pumpAndSettle();
+      expect(commandSearched, isTrue);
+
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('WindowsCommandBar renders branch pill, buttons, switch, and user profile cleanly', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;

@@ -511,10 +511,21 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
           children: [
             Column(
               children: [
-                // 1. Windows 11 Titlebar
+                // 1. Windows 11 Titlebar (Figma node 211:249)
                 WindowsTitleBar(
                   title: 'Otto',
                   subtitle: 'Windows 11 Fluent Workspace • ${workspace.repositoryName.isNotEmpty ? "${workspace.repositoryName} • " : ""}${workspace.currentBranch}',
+                  onOpenRepository: _handleOpenRepository,
+                  onCommandSearch: () => ref.read(hotkeyHudProvider.notifier).toggleHud(),
+                  onBack: () {
+                    if (_selectedTabIndex > 0) setState(() => _selectedTabIndex--);
+                  },
+                  onForward: () {
+                    if (_selectedTabIndex < navItems.length - 1) setState(() => _selectedTabIndex++);
+                  },
+                  userInitials: workspace.githubUser != null && workspace.githubUser!.isNotEmpty
+                      ? workspace.githubUser!.substring(0, workspace.githubUser!.length >= 2 ? 2 : 1).toUpperCase()
+                      : 'OS',
                 ),
 
                 // 2. Main Navigation Rail + Workspace Canvas
