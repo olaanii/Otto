@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -88,7 +89,8 @@ type GitHubConfig struct {
 	Connected     bool   `json:"connected"`
 	LastSyncedAt  string `json:"lastSyncedAt,omitempty"`
 	Mode          string `json:"mode,omitempty"`
-	Token         string `json:"token,omitempty"`
+	Token         string `json:"-"`
+	HasToken      bool   `json:"hasToken"`
 	UserLogin     string `json:"userLogin,omitempty"`
 	UserName      string `json:"userName,omitempty"`
 	AvatarURL     string `json:"avatarUrl,omitempty"`
@@ -454,6 +456,9 @@ func (s *DaemonServer) loadOrInitState() {
 	data, err := os.ReadFile(s.stateFile)
 	if err == nil {
 		if err := json.Unmarshal(data, &s.state); err == nil && s.state.Policy.MaxLocPerCommit > 0 {
+			if s.state.GitHubConfig.Connected || s.state.GitHubConfig.Token != "" {
+				s.state.GitHubConfig.HasToken = true
+			}
 			if s.state.Antigravity != nil {
 				s.antigravity = *s.state.Antigravity
 			}
@@ -525,6 +530,11 @@ func (s *DaemonServer) broadcastEvent(eventType string, payload any) {
 	s.clientsMu.Lock()
 	defer s.clientsMu.Unlock()
 
+	if cfg, ok := payload.(GitHubConfig); ok {
+		cfg.Token = ""
+		payload = cfg
+	}
+
 	msgData, _ := json.Marshal(map[string]any{
 		"type":      eventType,
 		"timestamp": time.Now().Format(time.RFC3339),
@@ -540,8 +550,66 @@ func (s *DaemonServer) broadcastEvent(eventType string, payload any) {
 	}
 }
 
+func maskSecretKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 8 {
+		return "sk-...****"
+	}
+	prefix := ""
+	if strings.HasPrefix(key, "sk-") {
+		prefix = "sk-..."
+	} else if len(key) > 6 {
+		prefix = key[:3] + "..."
+	} else {
+		prefix = "..."
+	}
+	return prefix + key[len(key)-4:]
+}
+
+func maskLlmKeys(keys map[string]string) map[string]string {
+	if keys == nil {
+		return nil
+	}
+	masked := make(map[string]string, len(keys))
+	for k, v := range keys {
+		if strings.HasSuffix(k, "_url") || strings.HasSuffix(k, "_model") {
+			masked[k] = v
+		} else {
+			masked[k] = maskSecretKey(v)
+		}
+	}
+	return masked
+}
+
+func isLoopbackOrigin(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if u.Scheme == "tauri" && (u.Host == "localhost" || u.Hostname() == "localhost") {
+		return true
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	h := u.Hostname()
+	return h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]"
+}
+
 func (s *DaemonServer) enableCORS(w http.ResponseWriter, r *http.Request) bool {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		if !isLoopbackOrigin(origin) {
+			http.Error(w, "Forbidden origin", http.StatusForbidden)
+			return true
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 	if r.Method == http.MethodOptions {
@@ -565,7 +633,13 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		if r.Method == http.MethodGet {
 			s.mu.RLock()
 			defer s.mu.RUnlock()
-			_ = json.NewEncoder(w).Encode(s.state)
+			safeState := s.state
+			safeState.GitHubConfig.Token = ""
+			if s.state.GitHubConfig.Token != "" || s.state.GitHubConfig.Connected {
+				safeState.GitHubConfig.HasToken = true
+			}
+			safeState.LlmKeys = maskLlmKeys(s.state.LlmKeys)
+			_ = json.NewEncoder(w).Encode(safeState)
 			return
 		}
 
@@ -756,7 +830,13 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 		if email == "" {
 			secretKey := os.Getenv("CLERK_SECRET_KEY")
 			if secretKey == "" {
-				secretKey = "sk_test_IeUYHK4p9m4JaeywJurBHL7F1Y4ibKbK3xBe3Mq3w2"
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"ok":    false,
+					"error": "CLERK_SECRET_KEY environment variable is not configured",
+				})
+				return
 			}
 			client := &http.Client{Timeout: 5 * time.Second}
 			req, err := http.NewRequest("GET", "https://api.clerk.com/v1/users?order_by=-last_sign_in_at&limit=1", nil)
@@ -854,7 +934,12 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 
 		secretKey := os.Getenv("CLERK_SECRET_KEY")
 		if secretKey == "" {
-			secretKey = "sk_test_IeUYHK4p9m4JaeywJurBHL7F1Y4ibKbK3xBe3Mq3w2"
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":    false,
+				"error": "CLERK_SECRET_KEY environment variable is not configured",
+			})
+			return
 		}
 		email := "developer@otto.local"
 		name := "Developer"
@@ -1419,12 +1504,12 @@ func (s *DaemonServer) SetupRouter() *http.ServeMux {
 }
 
 func findAvailablePort(preferredPort string) string {
-	ln, err := net.Listen("tcp", ":"+preferredPort)
+	ln, err := net.Listen("tcp", "127.0.0.1:"+preferredPort)
 	if err == nil {
 		_ = ln.Close()
 		return preferredPort
 	}
-	ln, err = net.Listen("tcp", ":0")
+	ln, err = net.Listen("tcp", "127.0.0.1:0")
 	if err == nil {
 		defer ln.Close()
 		addr := ln.Addr().(*net.TCPAddr)
@@ -1442,8 +1527,8 @@ func main() {
 	server := NewDaemonServer()
 	mux := server.SetupRouter()
 
-	log.Printf("🐙 Otto Native Go Daemon listening on http://localhost:%s\n", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	log.Printf("🐙 Otto Native Go Daemon listening on http://127.0.0.1:%s\n", port)
+	if err := http.ListenAndServe("127.0.0.1:"+port, mux); err != nil {
 		log.Fatalf("Server stopped: %v", err)
 	}
 }
