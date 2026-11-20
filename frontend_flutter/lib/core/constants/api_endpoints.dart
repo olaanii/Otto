@@ -37,6 +37,7 @@ class ApiEndpoints {
   static const String agentsConnect = '/api/agents/connect';
   static const String agentsConfirm = '/api/agents/confirm';
   static const String agentsDisconnect = '/api/agents/disconnect';
+  static const String agentsDiscoveredProjects = '/api/agents/discovered-projects';
   static const String llmConfigure = '/api/llm/configure';
   static const String llmTestConnection = '/api/llm/test-connection';
   static const String llmCommitMessage = '/llm/commit-message';

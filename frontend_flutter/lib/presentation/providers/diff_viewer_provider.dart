@@ -108,6 +108,10 @@ class DiffViewerNotifier extends StateNotifier<DiffViewerState> {
     );
   }
 
+  void reset() {
+    state = const DiffViewerState();
+  }
+
   void toggleSyntaxHighlighting() {
     state = state.copyWith(
       showSyntaxHighlighting: !state.showSyntaxHighlighting,
