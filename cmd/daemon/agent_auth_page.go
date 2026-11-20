@@ -1,13 +1,25 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html"
+	"strings"
 )
 
 func renderAgentAuthPage(agentID, agentName, workspace, token string) string {
 	safeName, safePath := html.EscapeString(agentName), html.EscapeString(workspace)
-	safeToken, safeID := html.EscapeString(token), html.EscapeString(agentID)
+
+	jsonAgentID, err := json.Marshal(agentID)
+	if err != nil {
+		jsonAgentID = []byte(`""`)
+	}
+	jsonToken, err := json.Marshal(token)
+	if err != nil {
+		jsonToken = []byte(`""`)
+	}
+	jsAgentID := strings.ReplaceAll(string(jsonAgentID), "</", `<\x2F`)
+	jsToken := strings.ReplaceAll(string(jsonToken), "</", `<\x2F`)
 
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -52,8 +64,10 @@ func renderAgentAuthPage(agentID, agentName, workspace, token string) string {
     </div>
   </div>
   <script>
+    const agentId = %s;
+    const token = %s;
     function closeTab() {
-      try { window.location.href = 'otto://connected?agent=%s'; } catch(_) {}
+      try { window.location.href = 'otto://connected?agent=' + encodeURIComponent(agentId); } catch(_) {}
       try { window.open('', '_self'); window.close(); } catch(_) {}
       try { window.close(); } catch(_) {}
     }
@@ -61,7 +75,7 @@ func renderAgentAuthPage(agentID, agentName, workspace, token string) string {
       const btn = document.getElementById('btnAuth');
       btn.innerText = 'Connecting...'; btn.disabled = true;
       try {
-        const res = await fetch('/api/agents/confirm', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({agentId: '%s', token: '%s'})});
+        const res = await fetch('/api/agents/confirm', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({agentId: agentId, token: token})});
         const data = await res.json();
         if (data.ok) {
           document.getElementById('content').style.display = 'none';
@@ -75,5 +89,5 @@ func renderAgentAuthPage(agentID, agentName, workspace, token string) string {
     }
   </script>
 </body>
-</html>`, safeName, safeName, safePath, safeID, safeID, safeToken)
+</html>`, safeName, safeName, safePath, jsAgentID, jsToken)
 }

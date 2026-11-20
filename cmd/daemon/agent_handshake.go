@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"os/exec"
@@ -50,7 +51,8 @@ func (s *DaemonServer) RegisterAgentHandshakeEndpoints(mux *http.ServeMux) {
 		targetDir := ""
 		for i := range s.state.IdeProfiles {
 			if s.state.IdeProfiles[i].ID == body.AgentID {
-				if body.Token == "" || s.state.IdeProfiles[i].HandshakeToken == body.Token {
+				if body.Token != "" && s.state.IdeProfiles[i].HandshakeToken != "" &&
+					subtle.ConstantTimeCompare([]byte(s.state.IdeProfiles[i].HandshakeToken), []byte(body.Token)) == 1 {
 					s.state.IdeProfiles[i].Connected = true
 					s.state.IdeProfiles[i].Status = "watching_realtime"
 					s.state.IdeProfiles[i].HandshakeToken = ""
