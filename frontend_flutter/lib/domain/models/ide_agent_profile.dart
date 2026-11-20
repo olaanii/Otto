@@ -9,7 +9,10 @@ class IdeAgentProfile {
   final List<String> activeFiles;
   final String? currentPrompt;
   final bool isActive;
-  final DateTime lastActiveAt;
+  final String status;
+  final DateTime? lastActiveAt;
+
+  bool get isAwaitingConfirmation => status == 'awaiting_confirmation';
 
   const IdeAgentProfile({
     required this.id,
@@ -20,7 +23,8 @@ class IdeAgentProfile {
     this.activeFiles = const [],
     this.currentPrompt,
     this.isActive = false,
-    required this.lastActiveAt,
+    this.status = 'idle',
+    this.lastActiveAt,
   });
 
   IdeAgentProfile copyWith({
@@ -32,6 +36,7 @@ class IdeAgentProfile {
     List<String>? activeFiles,
     String? currentPrompt,
     bool? isActive,
+    String? status,
     DateTime? lastActiveAt,
   }) {
     return IdeAgentProfile(
@@ -43,6 +48,7 @@ class IdeAgentProfile {
       activeFiles: activeFiles ?? this.activeFiles,
       currentPrompt: currentPrompt ?? this.currentPrompt,
       isActive: isActive ?? this.isActive,
+      status: status ?? this.status,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
     );
   }
@@ -56,53 +62,63 @@ class IdeAgentProfile {
         'activeFiles': activeFiles,
         'currentPrompt': currentPrompt,
         'isActive': isActive,
-        'lastActiveAt': lastActiveAt.toIso8601String(),
+        'status': status,
+        'lastActiveAt': lastActiveAt?.toIso8601String(),
       };
 
-  factory IdeAgentProfile.fromJson(Map<String, dynamic> json) => IdeAgentProfile(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        description: json['description'] as String? ?? '',
-        colorHex: json['colorHex'] as String? ?? '#6366F1',
-        iconKey: json['iconKey'] as String? ?? 'bot',
-        activeFiles: (json['activeFiles'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            const [],
-        currentPrompt: json['currentPrompt'] as String?,
-        isActive: json['isActive'] as bool? ?? false,
-        lastActiveAt: json['lastActiveAt'] != null
-            ? DateTime.tryParse(json['lastActiveAt'] as String) ?? DateTime.now()
-            : DateTime.now(),
-      );
+  factory IdeAgentProfile.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] as String? ?? 'agent').toLowerCase();
+    final name = json['name'] as String? ?? id;
+    final rawStatus = json['status'] as String? ?? '';
+    final isConn = json['connected'] == true || json['isActive'] == true || rawStatus == 'watching_realtime';
+    final resolvedStatus = rawStatus.isNotEmpty ? rawStatus : (isConn ? 'watching_realtime' : 'idle');
+    String desc = json['description'] as String? ?? '';
+    String color = json['colorHex'] as String? ?? '#4285F4';
+    if (id.contains('antigravity')) {
+      desc = desc.isNotEmpty ? desc : 'Agent-first IDE & autonomous commit daemon';
+      color = '#4285F4';
+    } else if (id.contains('cursor')) {
+      desc = desc.isNotEmpty ? desc : 'AI-first code editor & Composer';
+      color = '#00D8A5';
+    } else if (id.contains('vscode') || id.contains('code')) {
+      desc = desc.isNotEmpty ? desc : 'Visual Studio Code & Copilot';
+      color = '#007ACC';
+    }
+    return IdeAgentProfile(
+      id: id,
+      name: name,
+      description: desc,
+      colorHex: color,
+      iconKey: json['iconKey'] as String? ?? id,
+      activeFiles: (json['activeFiles'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      currentPrompt: json['currentPrompt'] as String?,
+      isActive: isConn,
+      status: resolvedStatus,
+      lastActiveAt: json['lastActiveAt'] != null ? DateTime.tryParse(json['lastActiveAt'] as String) : null,
+    );
+  }
 
-  static List<IdeAgentProfile> get defaults => [
+  static List<IdeAgentProfile> get defaults => const [
         IdeAgentProfile(
-          id: 'claude-code',
-          name: 'Claude Code',
-          description: 'Anthropic CLI research & refactoring agent',
-          colorHex: '#D97706',
-          iconKey: 'claude',
-          isActive: true,
-          lastActiveAt: DateTime.now(),
+          id: 'antigravity',
+          name: 'Google Antigravity',
+          description: 'Agent-first IDE & autonomous commit daemon',
+          colorHex: '#4285F4',
+          iconKey: 'antigravity',
         ),
         IdeAgentProfile(
-          id: 'cursor-composer',
-          name: 'Cursor Composer',
-          description: 'Multi-file codebase editor agent',
-          colorHex: '#6366F1',
+          id: 'cursor',
+          name: 'Cursor',
+          description: 'AI code editor & Composer',
+          colorHex: '#00D8A5',
           iconKey: 'cursor',
-          isActive: false,
-          lastActiveAt: DateTime.now().subtract(const Duration(minutes: 5)),
         ),
         IdeAgentProfile(
-          id: 'cline',
-          name: 'Cline',
-          description: 'Autonomous coding assistant',
-          colorHex: '#10B981',
-          iconKey: 'cline',
-          isActive: false,
-          lastActiveAt: DateTime.now().subtract(const Duration(minutes: 20)),
+          id: 'vscode',
+          name: 'VS Code',
+          description: 'Visual Studio Code & Copilot',
+          colorHex: '#007ACC',
+          iconKey: 'vscode',
         ),
       ];
 }

@@ -281,7 +281,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: profile?.email || 'olaaniiishaambal@gmail.com',
+          email: profile?.email || 'user@example.com',
           name: profile?.fullName || 'Olani Shambel',
           authProvider: profile?.authProvider || 'google',
         }),

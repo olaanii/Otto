@@ -26,19 +26,19 @@ export const DEFAULT_CLERK_USER: ClerkUserProfile = {
 };
 
 export const GOOGLE_USER_PROFILE: ClerkUserProfile = {
-  id: 'user_google_olaanii',
-  fullName: 'Olani Shambel',
-  email: 'olaaniiishaambal@gmail.com',
-  avatarUrl: 'https://avatars.githubusercontent.com/u/182292833?v=4',
-  role: 'Principal Architect',
-  organization: 'Antigravity Workspace',
+  id: 'user_google_oauth',
+  fullName: 'Google User',
+  email: 'user@gmail.com',
+  avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=128&auto=format&fit=crop&q=80',
+  role: 'Developer',
+  organization: 'Workspace',
   authProvider: 'google',
-  sessionToken: 'google_oauth2_antigravity_live_9f81a7b2e3c4d5',
-  tokenExpires: 'Active (Google Antigravity OAuth2)',
+  sessionToken: '',
+  tokenExpires: '',
 };
 
 export const isGoogleUser = (user?: ClerkUserProfile | null): boolean =>
-  user?.authProvider === 'google' || user?.email === 'olaaniiishaambal@gmail.com';
+  user?.authProvider === 'google';
 
 export const GoogleGIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

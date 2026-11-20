@@ -18,10 +18,29 @@ class ApiEndpoints {
   static const String syncStatus = '/api/github/sync-status';
   static const String syncNow = '/api/github/sync-now';
 
-  // Auth & Session
+  // Auth & Session (wired to actual backend routes)
+  static const String antigravityConnect = '/api/antigravity/connect';
+  static const String antigravityStatus = '/api/antigravity/status';
+  static const String antigravitySignout = '/api/antigravity/signout';
+
+  // Legacy aliases kept for reference — not used by ClerkAuthDataSource
   static const String clerkVerify = '/auth/clerk-verify';
   static const String clerkSession = '/auth/session';
   static const String clerkSignOut = '/auth/signout';
+
+  // Real Integrations
+  static const String githubConnect = '/api/github/connect';
+  static const String githubDisconnect = '/api/github/disconnect';
+  static const String githubUser = '/api/github/user';
+  static const String workspaceOpen = '/api/workspace/open';
+  static const String workspaceRecent = '/api/workspace/recent';
+  static const String agentsConnect = '/api/agents/connect';
+  static const String agentsConfirm = '/api/agents/confirm';
+  static const String agentsDisconnect = '/api/agents/disconnect';
+  static const String agentsDiscoveredProjects = '/api/agents/discovered-projects';
+  static const String llmConfigure = '/api/llm/configure';
+  static const String llmTestConnection = '/api/llm/test-connection';
+  static const String llmCommitMessage = '/llm/commit-message';
 
   // Compatibility aliases
   static const String workspaceState = state;

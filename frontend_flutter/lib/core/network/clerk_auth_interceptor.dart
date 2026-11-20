@@ -43,8 +43,8 @@ class ClerkAuthInterceptor extends Interceptor {
   Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
     // Avoid re-authenticating auth endpoints or requests explicitly marked with X-Skip-Auth
     if (err.requestOptions.headers['X-Skip-Auth'] == 'true' ||
-        err.requestOptions.path.contains(ApiEndpoints.clerkSession) ||
-        err.requestOptions.path.contains(ApiEndpoints.clerkVerify)) {
+        err.requestOptions.path.contains(ApiEndpoints.antigravityConnect) ||
+        err.requestOptions.path.contains(ApiEndpoints.antigravityStatus)) {
       return handler.next(err);
     }
 
@@ -86,13 +86,12 @@ class ClerkAuthInterceptor extends Interceptor {
           _refreshCompleter = completer;
 
           try {
-            final refreshResponse = await dio.post<Map<String, dynamic>>(
-              ApiEndpoints.clerkSession,
-              data: {'session_token': sessionToken},
+            final refreshResponse = await dio.get<Map<String, dynamic>>(
+              ApiEndpoints.antigravityStatus,
               options: Options(headers: {'X-Skip-Auth': 'true'}),
             );
 
-            final jwt = refreshResponse.data?['jwt'] as String?;
+            final jwt = refreshResponse.data?['user'] != null ? sessionToken : null;
             if (jwt != null && jwt.isNotEmpty) {
               await secureStorage.write(SecureStorageService.keyClerkJwt, jwt);
               completer.complete(jwt);

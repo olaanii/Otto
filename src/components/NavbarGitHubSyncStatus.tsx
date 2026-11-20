@@ -63,7 +63,7 @@ export const NavbarGitHubSyncStatus: React.FC<NavbarGitHubSyncStatusProps> = ({
 
   const effectiveOwner =
     !githubConfig?.owner || githubConfig.owner === 'olaniketema'
-      ? 'olaanii'
+      ? ''
       : githubConfig.owner;
   const effectiveRepo =
     !githubConfig?.repo || githubConfig.repo === 'antigravity-core-platform'

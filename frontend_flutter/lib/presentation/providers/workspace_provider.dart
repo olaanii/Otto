@@ -70,6 +70,12 @@ class WorkspaceState {
   final String? errorMessage;
   final List<IdeAgentProfile> activeAgents;
   final GuardrailPolicy guardrailPolicy;
+  final String repositoryPath;
+  final String repositoryName;
+  final String? githubUser;
+  final String? githubAvatarUrl;
+  final bool isGithubConnected;
+  final List<String> recentWorkspaces;
 
   WorkspaceState({
     this.isLoading = false,
@@ -80,6 +86,12 @@ class WorkspaceState {
     this.errorMessage,
     List<IdeAgentProfile>? activeAgents,
     this.guardrailPolicy = const GuardrailPolicy(),
+    this.repositoryPath = '',
+    this.repositoryName = 'Otto',
+    this.githubUser,
+    this.githubAvatarUrl,
+    this.isGithubConnected = false,
+    this.recentWorkspaces = const [],
   })  : stackGraph = stackGraph ?? StackDependencyGraph(commits: []),
         activeAgents = activeAgents ?? IdeAgentProfile.defaults;
 
@@ -92,6 +104,12 @@ class WorkspaceState {
     String? errorMessage,
     List<IdeAgentProfile>? activeAgents,
     GuardrailPolicy? guardrailPolicy,
+    String? repositoryPath,
+    String? repositoryName,
+    String? githubUser,
+    String? githubAvatarUrl,
+    bool? isGithubConnected,
+    List<String>? recentWorkspaces,
   }) {
     return WorkspaceState(
       isLoading: isLoading ?? this.isLoading,
@@ -102,6 +120,12 @@ class WorkspaceState {
       errorMessage: errorMessage,
       activeAgents: activeAgents ?? this.activeAgents,
       guardrailPolicy: guardrailPolicy ?? this.guardrailPolicy,
+      repositoryPath: repositoryPath ?? this.repositoryPath,
+      repositoryName: repositoryName ?? this.repositoryName,
+      githubUser: githubUser ?? this.githubUser,
+      githubAvatarUrl: githubAvatarUrl ?? this.githubAvatarUrl,
+      isGithubConnected: isGithubConnected ?? this.isGithubConnected,
+      recentWorkspaces: recentWorkspaces ?? this.recentWorkspaces,
     );
   }
 }
@@ -110,14 +134,17 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
   final FetchWorkspaceStateUseCase _fetchStateUseCase;
   final SliceDiffUseCase _sliceDiffUseCase;
   final PushAtomicStackUseCase _pushStackUseCase;
+  final Ref? _ref;
 
   WorkspaceNotifier({
     required FetchWorkspaceStateUseCase fetchStateUseCase,
     required SliceDiffUseCase sliceDiffUseCase,
     required PushAtomicStackUseCase pushStackUseCase,
+    Ref? ref,
   })  : _fetchStateUseCase = fetchStateUseCase,
         _sliceDiffUseCase = sliceDiffUseCase,
         _pushStackUseCase = pushStackUseCase,
+        _ref = ref,
         super(WorkspaceState()) {
     refreshWorkspace();
   }
@@ -126,11 +153,57 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final res = await _fetchStateUseCase();
+      String repoPath = state.repositoryPath;
+      String repoName = state.repositoryName;
+      bool isGhConnected = state.isGithubConnected;
+      String? ghUser = state.githubUser;
+      String? ghAvatar = state.githubAvatarUrl;
+      List<String> recents = state.recentWorkspaces;
+
+      if (_ref != null) {
+        try {
+          final client = _ref.read(apiClientProvider);
+          final stateResp = await client.get<Map<String, dynamic>>(ApiEndpoints.workspaceState);
+          final data = stateResp.data ?? {};
+          final gh = data['githubConfig'] is Map ? data['githubConfig'] as Map : {};
+          isGhConnected = gh['connected'] == true;
+          ghUser = (gh['userLogin'] ?? gh['userName']) as String?;
+          ghAvatar = gh['avatarUrl'] as String?;
+          final ag = data['antigravity'] is Map ? data['antigravity'] as Map : {};
+          repoPath = (ag['worktreePath'] ?? data['worktreePath'] ?? repoPath) as String;
+          if (repoPath.isNotEmpty) {
+            final normalized = repoPath.replaceAll(r'\', '/');
+            final parts = normalized.split('/').where((s) => s.isNotEmpty).toList();
+            if (parts.isNotEmpty) repoName = parts.last;
+          }
+
+          final recentResp = await client.get<Map<String, dynamic>>(ApiEndpoints.workspaceRecent);
+          final rawRecent = recentResp.data?['recent'] as List<dynamic>? ?? [];
+          if (rawRecent.isNotEmpty) {
+            recents = rawRecent.map((e) => e.toString()).toList();
+          }
+          if (data['ideProfiles'] is List) {
+            final profiles = (data['ideProfiles'] as List)
+                .map((p) => IdeAgentProfile.fromJson(p as Map<String, dynamic>))
+                .toList();
+            if (profiles.isNotEmpty) {
+              state = state.copyWith(activeAgents: profiles);
+            }
+          }
+        } catch (_) {}
+      }
+
       state = state.copyWith(
         isLoading: false,
         uncommittedDiffs: res.uncommittedDiffs,
         stackGraph: res.stackGraph,
         currentBranch: res.currentBranch,
+        repositoryPath: repoPath,
+        repositoryName: repoName,
+        isGithubConnected: isGhConnected,
+        githubUser: ghUser,
+        githubAvatarUrl: ghAvatar,
+        recentWorkspaces: recents,
       );
     } catch (e) {
       state = state.copyWith(
@@ -196,6 +269,7 @@ final workspaceProvider = StateNotifierProvider<WorkspaceNotifier, WorkspaceStat
     fetchStateUseCase: fetch,
     sliceDiffUseCase: slice,
     pushStackUseCase: push,
+    ref: ref,
   );
 
   // Auto-refresh when SSE events arrive (named events or generic state JSON payloads)

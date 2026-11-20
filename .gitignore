@@ -11,6 +11,7 @@ coverage/
 .pub-cache/
 .npm-cache/
 *.exe
+*.exe~
 Otto.cmd
 package-lock.json
 

@@ -81,7 +81,7 @@ void main() {
       // Use an interceptor to simulate 404 from /auth/session
       dio.interceptors.add(InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (options.path.contains('/auth/session')) {
+          if (options.path.contains('/auth/session') || options.path.contains('/api/antigravity/status')) {
             handler.reject(
               DioException(
                 requestOptions: options,
@@ -120,7 +120,7 @@ void main() {
 
       dio.interceptors.add(InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (options.path.contains('/auth/session')) {
+          if (options.path.contains('/auth/session') || options.path.contains('/api/antigravity/status')) {
             handler.reject(
               DioException(
                 requestOptions: options,
@@ -154,7 +154,7 @@ void main() {
 
       dio.interceptors.add(InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (options.path.contains('/auth/session')) {
+          if (options.path.contains('/auth/session') || options.path.contains('/api/antigravity/status')) {
             handler.reject(
               DioException(
                 requestOptions: options,
@@ -216,7 +216,7 @@ void main() {
 
       dio.interceptors.add(InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (options.path.contains('/auth/session')) {
+          if (options.path.contains('/auth/session') || options.path.contains('/api/antigravity/status')) {
             handler.reject(
               DioException(
                 requestOptions: options,

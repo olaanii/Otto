@@ -8,11 +8,18 @@ import 'windows_fluent_theme.dart';
 /// and Clerk User profile pill with flyout.
 class WindowsCommandBar extends StatefulWidget {
   final String currentBranch;
+  final String repositoryName;
   final int pendingCommitCount;
   final bool isSyncing;
   final bool isRefining;
   final bool isAutoPilot;
   final ClerkUserSession? userSession;
+  final bool isGithubConnected;
+  final String? githubUser;
+  final String? githubAvatarUrl;
+  final String? activeModelName;
+  final List<String> availableModels;
+  final ValueChanged<String>? onSelectModel;
   final VoidCallback? onSyncNow;
   final VoidCallback? onRefineWithAi;
   final ValueChanged<bool>? onAutoPilotChanged;
@@ -21,15 +28,26 @@ class WindowsCommandBar extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenShortcuts;
   final VoidCallback? onSignOut;
+  final VoidCallback? onSignIn;
+  final VoidCallback? onOpenRepository;
+  final VoidCallback? onConnectGithub;
+  final VoidCallback? onDisconnectGithub;
 
   const WindowsCommandBar({
     super.key,
     required this.currentBranch,
+    this.repositoryName = 'Otto',
     this.pendingCommitCount = 0,
     this.isSyncing = false,
     this.isRefining = false,
     this.isAutoPilot = false,
     this.userSession,
+    this.isGithubConnected = false,
+    this.githubUser,
+    this.githubAvatarUrl,
+    this.activeModelName,
+    this.availableModels = const [],
+    this.onSelectModel,
     this.onSyncNow,
     this.onRefineWithAi,
     this.onAutoPilotChanged,
@@ -38,6 +56,10 @@ class WindowsCommandBar extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenShortcuts,
     this.onSignOut,
+    this.onSignIn,
+    this.onOpenRepository,
+    this.onConnectGithub,
+    this.onDisconnectGithub,
   });
 
   @override
@@ -79,9 +101,11 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+    final isWide = constraints.maxWidth >= 1080;
     return Container(
       height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: const BoxDecoration(
         color: Color(0xFF202020),
         border: Border(
@@ -93,10 +117,12 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
       ),
       child: Row(
         children: [
-          // 1. Figma Input/ComboBox: Current Branch
-          _BranchPill(
+          // 1. Interactive Repository & Branch Selector Pill
+          _RepoAndBranchPill(
+            repositoryName: widget.repositoryName.isNotEmpty ? widget.repositoryName : 'Otto',
             branch: widget.currentBranch,
-            tooltip: 'Active Git Branch: ${widget.currentBranch}',
+            tooltip: 'Active Repository: ${widget.repositoryName} • Branch: ${widget.currentBranch} (Click to switch)',
+            onTap: widget.onOpenRepository,
           ),
 
           const SizedBox(width: 8),
@@ -193,6 +219,18 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
             ),
           ),
 
+          if (isWide) ...[
+            const SizedBox(width: 8),
+            _ActiveModelPill(
+              modelName: widget.activeModelName ?? 'Google Antigravity (Pro)',
+              availableModels: widget.availableModels.isNotEmpty
+                  ? widget.availableModels
+                  : const ['Google Antigravity (Pro Subscription)', 'Gemini 2.5 Flash', 'Claude 3.5 Sonnet', 'OpenAI GPT-4o', 'Local Ollama'],
+              onSelectModel: widget.onSelectModel,
+              onOpenSettings: widget.onOpenSettings,
+            ),
+          ],
+
           const Spacer(),
 
           // 4. Figma Auto-Pilot Label & Switch
@@ -212,7 +250,7 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
             tooltip: 'Automatically slice diffs as IDE agents generate code',
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
 
           // 5. Overflow Commands ('...')
           _OverflowMenuButton(
@@ -220,66 +258,112 @@ class _WindowsCommandBarState extends State<WindowsCommandBar>
             onToggleHud: widget.onToggleHud,
             onOpenSettings: widget.onOpenSettings,
             onOpenShortcuts: widget.onOpenShortcuts,
+            onOpenRepository: widget.onOpenRepository,
           ),
 
           const SizedBox(width: 8),
 
-          // 6. User Profile Pill
+          // 6. User Profile / GitHub Pill
           _ClerkUserPill(
             userSession: widget.userSession,
+            isGithubConnected: widget.isGithubConnected,
+            githubUser: widget.githubUser,
+            githubAvatarUrl: widget.githubAvatarUrl,
             onOpenSettings: widget.onOpenSettings,
+            onConnectGithub: widget.onConnectGithub,
+            onDisconnectGithub: widget.onDisconnectGithub,
             onSignOut: widget.onSignOut,
+            onSignIn: widget.onSignIn,
           ),
         ],
       ),
     );
+    });
   }
 }
 
-/// Figma Input/ComboBox: Active Git Branch selector.
-class _BranchPill extends StatelessWidget {
-  final String branch;
-  final String tooltip;
+/// Active AI Model Fast Switcher Pill
+class _ActiveModelPill extends StatelessWidget {
+  final String modelName;
+  final List<String> availableModels;
+  final ValueChanged<String>? onSelectModel;
+  final VoidCallback? onOpenSettings;
 
-  const _BranchPill({required this.branch, required this.tooltip});
+  const _ActiveModelPill({
+    required this.modelName,
+    this.availableModels = const [],
+    this.onSelectModel,
+    this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        height: 32,
-        width: 128,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A3A3A),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: const Color(0xFF484848),
-            width: 1,
+    return PopupMenuButton<String>(
+      tooltip: 'Active AI Model: $modelName (Click to switch)',
+      offset: const Offset(0, 36),
+      itemBuilder: (context) => [
+        for (final m in availableModels)
+          PopupMenuItem(
+            value: m,
+            child: Row(
+              children: [
+                if (m == modelName)
+                  const Icon(Icons.check_rounded, size: 14, color: Color(0xFF60CDFF))
+                else
+                  const SizedBox(width: 14),
+                const SizedBox(width: 8),
+                Text(m, style: const TextStyle(fontSize: 12.5)),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: '__configure__',
+          child: Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 14),
+              SizedBox(width: 8),
+              Text('Configure Models & Keys...', style: TextStyle(fontSize: 12.5)),
+            ],
           ),
         ),
+      ],
+      onSelected: (val) {
+        if (val == '__configure__') {
+          onOpenSettings?.call();
+        } else {
+          onSelectModel?.call(val);
+        }
+      },
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2E2E34),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFF4A4A52)),
+        ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
+            const Icon(Icons.auto_awesome, size: 12, color: Color(0xFF60CDFF)),
+            const SizedBox(width: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 85),
               child: Text(
-                branch,
+                modelName,
                 style: const TextStyle(
                   fontFamily: FluentTypography.fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                   color: Colors.white,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 14,
-              color: Color(0xFFB3B3B3),
-            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: Color(0xFFB3B3B3)),
           ],
         ),
       ),
@@ -287,16 +371,108 @@ class _BranchPill extends StatelessWidget {
   }
 }
 
-/// Windows 11 Clerk User Pill with popover flyout.
+/// Repository Selector Pill with folder icon.
+/// Interactive Repository & Branch Selector Pill.
+class _RepoAndBranchPill extends StatelessWidget {
+  final String repositoryName;
+  final String branch;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  const _RepoAndBranchPill({
+    required this.repositoryName,
+    required this.branch,
+    required this.tooltip,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF353535),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: const Color(0xFF484848),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.folder_open_rounded, size: 13, color: Color(0xFF60CDFF)),
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 68),
+                child: Text(
+                  repositoryName,
+                  style: const TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text('•', style: TextStyle(color: Color(0xFF888888), fontSize: 11)),
+              ),
+              const Icon(Icons.fork_right_rounded, size: 13, color: Color(0xFF888888)),
+              const SizedBox(width: 2),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 58),
+                child: Text(
+                  branch,
+                  style: const TextStyle(
+                    fontFamily: FluentTypography.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFFCCCCCC),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(Icons.arrow_drop_down_rounded, size: 15, color: Color(0xFFB3B3B3)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Windows 11 Clerk User / GitHub Profile Pill with popover flyout.
 class _ClerkUserPill extends StatelessWidget {
   final ClerkUserSession? userSession;
+  final bool isGithubConnected;
+  final String? githubUser;
+  final String? githubAvatarUrl;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onConnectGithub;
+  final VoidCallback? onDisconnectGithub;
   final VoidCallback? onSignOut;
+  final VoidCallback? onSignIn;
 
   const _ClerkUserPill({
     required this.userSession,
+    this.isGithubConnected = false,
+    this.githubUser,
+    this.githubAvatarUrl,
     this.onOpenSettings,
+    this.onConnectGithub,
+    this.onDisconnectGithub,
     this.onSignOut,
+    this.onSignIn,
   });
 
   @override
@@ -304,16 +480,122 @@ class _ClerkUserPill extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final user = userSession;
 
-    if (user == null) {
-      return const SizedBox.shrink();
+    // 1. Connected GitHub Account View
+    if (isGithubConnected && githubUser != null && githubUser!.isNotEmpty) {
+      return PopupMenuButton<String>(
+        tooltip: 'GitHub: @$githubUser (Connected)',
+        offset: const Offset(0, 36),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: isDark ? FluentMicaColors.cardStrokeDark : FluentMicaColors.cardStrokeLight,
+          ),
+        ),
+        color: isDark ? FluentMicaColors.layerBackgroundDark : FluentMicaColors.layerBackgroundLight,
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            enabled: false,
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF6CCB5F)),
+                const SizedBox(width: 8),
+                Text('@$githubUser (Connected)', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: 'settings',
+            child: Row(
+              children: [
+                const Icon(Icons.settings_outlined, size: 14),
+                const SizedBox(width: 8),
+                Text('Workspace & LLM Settings', style: FluentTypography.body.copyWith(fontSize: 12.5)),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'disconnect',
+            child: Row(
+              children: [
+                const Icon(Icons.link_off_rounded, size: 14, color: FluentMicaColors.gitRemoved),
+                const SizedBox(width: 8),
+                Text('Disconnect GitHub', style: FluentTypography.body.copyWith(fontSize: 12.5, color: FluentMicaColors.gitRemoved)),
+              ],
+            ),
+          ),
+        ],
+        onSelected: (val) {
+          if (val == 'settings') onOpenSettings?.call();
+          if (val == 'disconnect') onDisconnectGithub?.call();
+        },
+        child: Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF282828),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: const Color(0xFF6CCB5F).withOpacity(0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(color: Color(0xFF6CCB5F), shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '@$githubUser',
+                style: const TextStyle(
+                  fontFamily: FluentTypography.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    final avatarText = user.fullName.isNotEmpty
-        ? user.fullName.substring(0, 1).toUpperCase()
+    // 2. Unconnected State: Show 1-Click Connect GitHub Button
+    if (user == null) {
+      return FluentButton(
+        onPressed: onConnectGithub ?? onSignIn,
+        style: FluentButtonStyle.accent,
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.link_rounded, size: 14, color: Colors.black),
+            SizedBox(width: 6),
+            Text(
+              'Connect GitHub',
+              style: TextStyle(
+                fontFamily: FluentTypography.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final displayName = user.fullName.isNotEmpty
+        ? user.fullName
+        : (user.email.isNotEmpty ? user.email.split('@')[0] : 'User');
+    final avatarText = displayName.isNotEmpty
+        ? displayName.substring(0, 1).toUpperCase()
         : 'U';
 
     return PopupMenuButton<String>(
-      tooltip: 'Clerk User Profile (${user.fullName})',
+      tooltip: 'User Profile ($displayName)',
       offset: const Offset(0, 36),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
@@ -332,23 +614,35 @@ class _ClerkUserPill extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                user.fullName,
-                style: FluentTypography.bodyStrong.copyWith(
-                  fontSize: 13,
-                  color: isDark
-                      ? FluentMicaColors.textPrimaryDark
-                      : FluentMicaColors.textPrimaryLight,
-                ),
+              Row(
+                children: [
+                  Text(
+                    user.fullName,
+                    style: FluentTypography.bodyStrong.copyWith(
+                      fontSize: 13,
+                      color: isDark ? FluentMicaColors.textPrimaryDark : FluentMicaColors.textPrimaryLight,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(4)),
+                    child: const Text('Antigravity Pro', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF81C784))),
+                  ),
+                ],
               ),
+              const SizedBox(height: 2),
               Text(
                 user.email,
                 style: FluentTypography.caption.copyWith(
                   fontSize: 11,
-                  color: isDark
-                      ? FluentMicaColors.textSecondaryDark
-                      : FluentMicaColors.textSecondaryLight,
+                  color: isDark ? FluentMicaColors.textSecondaryDark : FluentMicaColors.textSecondaryLight,
                 ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Google AI Pro Plan • \$0 extra token fees',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Color(0xFF60CDFF)),
               ),
               if (user.isGithubConnected) ...[
                 const SizedBox(height: 6),
@@ -434,9 +728,9 @@ class _ClerkUserPill extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 100),
+              constraints: const BoxConstraints(maxWidth: 68),
               child: Text(
-                user.fullName,
+                displayName,
                 style: FluentTypography.bodyStrong.copyWith(
                   fontSize: 11.5,
                   color: isDark
@@ -446,6 +740,12 @@ class _ClerkUserPill extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(color: const Color(0xFF1B5E20), borderRadius: BorderRadius.circular(3)),
+              child: const Text('PRO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Color(0xFF81C784))),
             ),
             const SizedBox(width: 4),
             Icon(
@@ -468,12 +768,14 @@ class _OverflowMenuButton extends StatelessWidget {
   final VoidCallback? onToggleHud;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenShortcuts;
+  final VoidCallback? onOpenRepository;
 
   const _OverflowMenuButton({
     this.onOpenRebase,
     this.onToggleHud,
     this.onOpenSettings,
     this.onOpenShortcuts,
+    this.onOpenRepository,
   });
 
   @override
@@ -495,6 +797,16 @@ class _OverflowMenuButton extends StatelessWidget {
           ? FluentMicaColors.layerBackgroundDark
           : FluentMicaColors.layerBackgroundLight,
       itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'open_repo',
+          child: Row(
+            children: [
+              const Icon(Icons.folder_open_rounded, size: 14),
+              const SizedBox(width: 8),
+              Text('Open Git Repository...', style: FluentTypography.body.copyWith(fontSize: 12.5)),
+            ],
+          ),
+        ),
         PopupMenuItem(
           value: 'rebase',
           child: Row(
@@ -537,6 +849,7 @@ class _OverflowMenuButton extends StatelessWidget {
         ),
       ],
       onSelected: (val) {
+        if (val == 'open_repo') onOpenRepository?.call();
         if (val == 'rebase') onOpenRebase?.call();
         if (val == 'hud') onToggleHud?.call();
         if (val == 'shortcuts') onOpenShortcuts?.call();
