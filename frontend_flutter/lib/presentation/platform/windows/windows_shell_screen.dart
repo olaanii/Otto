@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_endpoints.dart';
@@ -159,16 +160,76 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
     } catch (_) {}
   }
 
-  Future<void> _handleOpenRepository() async {
+  Future<void> _openRepositoryPath(String path) async {
+    var cleanPath = path.trim();
+    if ((cleanPath.startsWith('"') && cleanPath.endsWith('"')) ||
+        (cleanPath.startsWith("'") && cleanPath.endsWith("'"))) {
+      cleanPath = cleanPath.substring(1, cleanPath.length - 1).trim();
+    }
+    if (cleanPath.isEmpty) return;
+
+    try {
+      final client = ref.read(apiClientProvider);
+      final res = await client.post<Map<String, dynamic>>(
+        ApiEndpoints.workspaceOpen,
+        data: {'path': cleanPath, 'autoInit': true},
+      );
+      final ok = res.data?['ok'] == true;
+      if (ok) {
+        ref.read(diffViewerProvider.notifier).reset();
+        setState(() {
+          _selectedBranchIndex = 0;
+          _selectedWorkingCommitIndex = 0;
+        });
+        await ref.read(workspaceProvider.notifier).refreshWorkspace();
+        final isNew = res.data?['isNewRepo'] == true;
+        _showFluentInfoBar(
+          message: isNew
+              ? 'Initialized new Git repository: $cleanPath'
+              : 'Opened repository: $cleanPath',
+        );
+      } else {
+        final err = res.data?['error'] ?? 'Could not open repository';
+        _showFluentInfoBar(message: '$err', isError: true);
+      }
+    } catch (e) {
+      final msg = e is ServerException ? e.message : '$e';
+      _showFluentInfoBar(message: 'Failed to open repository: $msg', isError: true);
+    }
+  }
+
+  Future<void> _handleOpenRepository({bool directPicker = true}) async {
+    if (directPicker) {
+      try {
+        final selectedDirectory = await getDirectoryPath(
+          confirmButtonText: 'Open Repository',
+        );
+        if (selectedDirectory != null && selectedDirectory.isNotEmpty) {
+          await _openRepositoryPath(selectedDirectory);
+          return;
+        }
+      } catch (e) {
+        debugPrint('Native folder picker failed: $e');
+      }
+    }
+
+    _showWorkspaceDirectoryModal();
+  }
+
+  Future<void> _showWorkspaceDirectoryModal() async {
     final controller = TextEditingController();
     final client = ref.read(apiClientProvider);
     String currentPath = '';
     List<String> recents = [];
+    List<Map<String, dynamic>> discovered = [];
+
     try {
       final res = await client.get<Map<String, dynamic>>(ApiEndpoints.workspaceRecent);
       currentPath = res.data?['current'] as String? ?? '';
       final rawRecents = res.data?['recent'] as List<dynamic>? ?? [];
       recents = rawRecents.map((e) => e.toString()).toList();
+      final rawDiscovered = res.data?['discoveredProjects'] as List<dynamic>? ?? [];
+      discovered = rawDiscovered.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {}
     controller.text = currentPath;
 
@@ -177,54 +238,124 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF242424),
-        title: const Text('Open Git Repository', style: TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Text('Select or Open Repository', style: TextStyle(color: Colors.white, fontSize: 16)),
         content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter or select a local Git repository path:',
-                style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 12.5),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: const Color(0xFF1E1E1E),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                  hintText: r'C:\Users\...\my-project',
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0078D4),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      try {
+                        final picked = await getDirectoryPath(confirmButtonText: 'Open Repository');
+                        if (picked != null && picked.isNotEmpty) {
+                          await _openRepositoryPath(picked);
+                        }
+                      } catch (e) {
+                        debugPrint('File picker error: $e');
+                      }
+                    },
+                    icon: const Icon(Icons.folder_open_rounded, size: 16),
+                    label: const Text('Browse in Windows Explorer...'),
+                  ),
                 ),
-              ),
-              if (recents.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                const Text('Recent Repositories:', style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 11.5)),
-                const SizedBox(height: 6),
-                for (final r in recents.take(4))
-                  InkWell(
-                    onTap: () => controller.text = r,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.history_rounded, size: 12, color: Color(0xFF60CDFF)),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              r,
-                              style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 16),
+                if (discovered.isNotEmpty) ...[
+                  const Text('Discovered from Connected Agents:', style: TextStyle(color: Color(0xFF60CDFF), fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  for (final d in discovered.take(6))
+                    InkWell(
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _openRepositoryPath(d['path'] as String? ?? '');
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_awesome, size: 13, color: Color(0xFF60CDFF)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    d['name'] as String? ?? '',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    '${d['path']} • ${d['sourceAgent']}',
+                                    style: const TextStyle(color: Color(0xFF8A8A8A), fontSize: 11),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF333333),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('Open', style: TextStyle(color: Color(0xFF60CDFF), fontSize: 11, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  const SizedBox(height: 14),
+                ],
+                if (recents.isNotEmpty) ...[
+                  const Text('Recent Repositories:', style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 11.5)),
+                  const SizedBox(height: 6),
+                  for (final r in recents.take(4))
+                    InkWell(
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _openRepositoryPath(r);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.history_rounded, size: 12, color: Color(0xFF60CDFF)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                r,
+                                style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                ],
+                const Text('Or enter path manually:', style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 12)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: controller,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                    hintText: r'C:\Users\...\my-project',
                   ),
+                ),
               ],
-            ],
+            ),
           ),
         ),
         actions: [
@@ -233,37 +364,9 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () async {
-              var path = controller.text.trim();
-              if ((path.startsWith('"') && path.endsWith('"')) ||
-                  (path.startsWith("'") && path.endsWith("'"))) {
-                path = path.substring(1, path.length - 1).trim();
-              }
-              if (path.isNotEmpty) {
-                Navigator.of(ctx).pop();
-                try {
-                  final res = await client.post<Map<String, dynamic>>(
-                    ApiEndpoints.workspaceOpen,
-                    data: {'path': path, 'autoInit': true},
-                  );
-                  final ok = res.data?['ok'] == true;
-                  if (ok) {
-                    await ref.read(workspaceProvider.notifier).refreshWorkspace();
-                    final isNew = res.data?['isNewRepo'] == true;
-                    _showFluentInfoBar(
-                      message: isNew
-                          ? 'Initialized new Git repository: $path'
-                          : 'Opened workspace: $path',
-                    );
-                  } else {
-                    final err = res.data?['error'] ?? 'Could not open repository';
-                    _showFluentInfoBar(message: '$err', isError: true);
-                  }
-                } catch (e) {
-                  final msg = e is ServerException ? e.message : '$e';
-                  _showFluentInfoBar(message: 'Failed to open repository: $msg', isError: true);
-                }
-              }
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _openRepositoryPath(controller.text);
             },
             child: const Text('Open'),
           ),
@@ -2243,7 +2346,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
               final crossAxisCount = constraints.maxWidth < 650
                   ? 1
                   : (constraints.maxWidth < 950 ? 2 : (constraints.maxWidth < 1250 ? 3 : 4));
-              final aspectRatio = constraints.maxWidth < 650 ? 2.5 : 1.45;
+              final aspectRatio = constraints.maxWidth < 650 ? 1.9 : 1.18;
 
               final agents = workspace.activeAgents.isNotEmpty
                   ? workspace.activeAgents
@@ -2260,6 +2363,7 @@ class _WindowsShellScreenState extends ConsumerState<WindowsShellScreen> {
                       agent: agent,
                       workspace: workspace,
                       showInfoBar: _showFluentInfoBar,
+                      onOpenProject: _openRepositoryPath,
                     ),
                 ],
               );
